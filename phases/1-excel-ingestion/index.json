@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "excel-ingestion",
+  "steps": [
+    {
+      "step": 0,
+      "name": "excel-refresh-prototype",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "extract-report-values",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "validate-output",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

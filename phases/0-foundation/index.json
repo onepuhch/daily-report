@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "foundation",
+  "steps": [
+    {
+      "step": 0,
+      "name": "confirm-requirements",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "map-excel-metrics",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "finalize-data-model",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

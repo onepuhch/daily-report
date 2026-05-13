@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "archive-rag",
+  "steps": [
+    {
+      "step": 0,
+      "name": "archive-search",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "rag-chatbot",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "answer-visualization",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

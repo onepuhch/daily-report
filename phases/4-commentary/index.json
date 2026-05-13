@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "commentary",
+  "steps": [
+    {
+      "step": 0,
+      "name": "generate-auto-comment-draft",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "admin-edit-flow",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "historical-jpg-ocr-plan",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

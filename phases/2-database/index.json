@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "database",
+  "steps": [
+    {
+      "step": 0,
+      "name": "create-supabase-project",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "create-schema",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "insert-sample-report",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

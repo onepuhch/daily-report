@@ -1,0 +1,36 @@
+{
+  "project": "daily-market-report-automation",
+  "phases": [
+    {
+      "dir": "0-foundation",
+      "name": "Foundation",
+      "status": "pending"
+    },
+    {
+      "dir": "1-excel-ingestion",
+      "name": "Excel Ingestion",
+      "status": "pending"
+    },
+    {
+      "dir": "2-database",
+      "name": "Database",
+      "status": "pending"
+    },
+    {
+      "dir": "3-report-ui",
+      "name": "Report UI",
+      "status": "pending"
+    },
+    {
+      "dir": "4-commentary",
+      "name": "Commentary Workflow",
+      "status": "pending"
+    },
+    {
+      "dir": "5-archive-rag",
+      "name": "Archive and RAG",
+      "status": "pending"
+    }
+  ]
+}
+

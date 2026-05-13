@@ -1,0 +1,39 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local Excel/data files
+*.xls
+*.xlsx
+*.xlsm
+*.jpg
+*.jpeg
+*.png
+~$*
+
+# Generated data and reports
+data/raw/
+data/processed/
+data/historical_jpg/
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node / web app artifacts
+node_modules/
+.next/
+dist/
+build/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

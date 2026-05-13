@@ -1,0 +1,25 @@
+{
+  "project": "daily-market-report-automation",
+  "phase": "report-ui",
+  "steps": [
+    {
+      "step": 0,
+      "name": "design-report-layout",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 1,
+      "name": "render-html-report",
+      "status": "pending",
+      "summary": ""
+    },
+    {
+      "step": 2,
+      "name": "export-share-image",
+      "status": "pending",
+      "summary": ""
+    }
+  ]
+}
+

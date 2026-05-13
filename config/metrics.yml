@@ -1,0 +1,45 @@
+# 추출 대상 지표 초안입니다.
+# 실제 셀 주소는 인포맥스 PC에서 갱신된 파일을 기준으로 확정합니다.
+
+categories:
+  domestic_rates:
+    label: 국내금리
+    source_sheets:
+      - camera
+      - 국내금리
+      - CD금리
+      - 크레딧SP
+  global_rates:
+    label: 해외금리
+    source_sheets:
+      - camera
+      - 해외금리
+  domestic_equities_fx:
+    label: 국내 주식 및 환율
+    source_sheets:
+      - camera
+      - 국내주식및환율
+  global_equities_fx_crypto:
+    label: 해외 주식, 환율 및 암호화폐
+    source_sheets:
+      - camera
+      - 해외주식
+      - 아시아주식
+      - 해외환율
+      - 암호화폐
+  investor_flows:
+    label: 투자자별 동향
+    source_sheets:
+      - camera
+      - 선물투자자별순매수금액
+      - 주식투자자별순매수금액
+  commodities:
+    label: 상품
+    source_sheets:
+      - camera
+      - 상품
+
+preferred_source:
+  initial: infomax_excel
+  long_term: infomax_excel_with_selected_api_replacements
+
