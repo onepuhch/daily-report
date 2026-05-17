@@ -4,7 +4,7 @@
 
 현재 목표는 매일 `MARKET DAILY.xlsm`에 저장된 시장 데이터를 읽어 HTML 리포트를 만들고, 관리자 화면에서 코멘트를 작성한 뒤 Supabase DB에 누적하는 것입니다. 장기적으로는 누적된 숫자 데이터와 코멘트를 기반으로 RAG 챗봇, 질문 기반 차트, 과거 리포트 검색까지 확장합니다.
 
-> **UI 리디자인 진행 중** — Notion 마케팅 스타일 → Stripe + KIS 스타일 금융 대시보드로 전환 중. 새 세션으로 이어 작업할 경우 `AGENTS.md` 의 "현재 진행 중" 섹션과 `docs/STATUS.md` 부터 확인.
+> **UI 리디자인 진행 중** — Notion 마케팅 스타일 → Stripe + KIS 스타일 금융 대시보드로 전환 중. 새 세션으로 이어 작업할 경우 **`HANDOFF.md` 하나만** 읽으면 됩니다 (진행 현황·다음 할 일·의사결정 기록 모두 통합).
 
 ## 현재 제공 기능
 
@@ -75,10 +75,8 @@ Supabase SQL 실행 또는 직접 저장
 - [Roadmap](docs/ROADMAP.md)
 
 ### 리디자인 진행 추적
-- [Redesign Plan](docs/REDESIGN_PLAN.md) — 전체 플랜
-- [Status](docs/STATUS.md) — 현재 상태 스냅샷
-- [Redesign Log](docs/REDESIGN_LOG.md) — 시간순 작업 일지
-- [Decisions](docs/DECISIONS.md) — 의사결정 기록
+- **[HANDOFF.md](HANDOFF.md)** — 인수인계서 (진행 현황 + 의사결정 + 작업 일지 통합, 이 파일 하나면 충분)
+- [Redesign Plan](docs/REDESIGN_PLAN.md) — Phase A~I 상세 플랜 (선택 참고)
 
 ## 보안 주의
 
