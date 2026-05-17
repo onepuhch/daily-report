@@ -410,25 +410,58 @@ function buildReviewHtml(report, comment) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Market Daily - ${escapeHtml(reportDate)}</title>
   <style>
+    @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
     :root {
-      --bg: #f7f7f5;
-      --paper: #ffffff;
-      --ink: #252525;
-      --muted: #6f6f6f;
-      --line: #e6e4df;
-      --soft: #f1f0ed;
-      --soft-strong: #ebe8e2;
-      --red: #b42318;
-      --blue: #2f5f9f;
-      --green: #0f7a4d;
+      /* New design system tokens (see design.md) */
+      --bg: #fafbfc;
+      --surface: #ffffff;
+      --border: #e6e8eb;
+      --border-strong: #d1d5db;
+      --text: #1a1f2e;
+      --text-strong: #0a0e1a;
+      --muted: #6b7280;
+      --subtle: #9ca3af;
+      --accent: #1f4ed8;
+      --accent-hover: #1846c4;
+      --accent-soft: #eef2ff;
+      --up: #d92d20;
+      --up-soft: #fef3f2;
+      --down: #1570ef;
+      --down-soft: #eff8ff;
+      --flat: #6b7280;
+      --warning: #b54708;
+      --error: #b42318;
+      --status-draft: #6b7280;
+      --status-reviewed: #1f4ed8;
+      --status-published: #067647;
+      --radius-xs: 2px;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --radius-full: 9999px;
+      --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-2: 0 4px 12px rgba(15, 23, 42, 0.08);
+      --shadow-3: 0 12px 32px rgba(15, 23, 42, 0.16);
+      --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+
+      /* Backward-compat aliases (Phase B에서 점진 제거) */
+      --paper: var(--surface);
+      --ink: var(--text);
+      --line: var(--border);
+      --soft: var(--bg);
+      --soft-strong: var(--border);
+      --red: var(--up);
+      --blue: var(--down);
+      --green: var(--status-published);
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
       background: var(--bg);
-      color: var(--ink);
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+      color: var(--text);
+      font-family: var(--font-sans);
       letter-spacing: 0;
     }
     main {

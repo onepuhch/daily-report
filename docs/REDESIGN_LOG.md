@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-05-17 — 집 PC, Claude — Phase A 완료 (디자인 시스템 정립)
+
+### 의도
+플랜·인프라 push 완료 직후 사용자가 "회사 가기 전까지 작업 좀 더 진행" 요청. Phase A 부터 시작.
+- `design.md` 전체 재작성 (Notion 마케팅 시스템 → 금융 대시보드 시스템)
+- `styles.css` `:root` 토큰 갱신
+- `server.mjs::buildReviewHtml` 내부 inline `<style>` 토큰 갱신 (레이아웃은 Phase B에서)
+- 색상 규칙(D-002): 상승 빨강, 하락 파랑
+
+### 진행
+- `design.md` 전체 재작성 완료. 새 SSOT: Stripe + KIS 스타일 금융 대시보드 디자인 시스템. 색상·타이포·간격·radius·elevation·컴포넌트 정의 + 모바일 반응형 + Do/Don't.
+- `styles.css` `:root` 신규 토큰 30+개 추가 (`--bg`, `--surface`, `--text`, `--accent`, `--up`/`--down`, spacing/radius/shadow). 백워드 호환을 위해 기존 변수(`--canvas`, `--ink`, `--hairline`, `--primary` 등)를 alias로 매핑 → 기존 컴포넌트 CSS는 손대지 않아도 작동.
+- `styles.css` body 셀렉터의 폰트를 Inter → Pretendard로 교체. `var(--font-sans)` 사용.
+- `styles.css` 맨 위에 Pretendard CDN `@import` 추가 (`jsdelivr` 호스팅).
+- `server.mjs::buildReviewHtml` (413~424줄 영역) inline `<style>` `:root` 블록 동일 토큰으로 교체 + 같은 백워드 호환 alias 적용. Pretendard `@import` 도 추가.
+- Codex가 이미 `.up`=빨강 / `.down`=파랑으로 한국식 색상을 적용해둔 사실 발견 — 우리 결정(D-002)과 자연스럽게 호환.
+- 검증: `node -e "import(...)"` 으로 server.mjs 문법 OK 확인.
+
+### 결정
+- Phase A 범위 한정: 디자인 토큰·문서만 교체. 레이아웃 구조 변경은 Phase B에서. → 회귀 위험 최소화하고 단계적 검증 가능.
+- 백워드 호환 alias 유지: Phase B/C/D 작업하면서 점진적으로 새 이름으로 마이그레이션. 한 번에 전체 교체 X.
+- Pretendard CDN 방식 채택 (self-host 아님): 카카오톡 인앱 브라우저에서도 즉시 로드, 추가 빌드 단계 불필요. CDN 장애 시 fallback 시스템 폰트로 자동 전환.
+
+### 미완 / 다음 단계
+- Phase A는 토큰만 교체했고, 기존 CSS 셀렉터·레이아웃은 그대로 → 화면이 살짝 색만 바뀐 정도로 보일 것. 실제 시각 임팩트는 Phase B/C에서 발생.
+- **Phase B 진입 권장**: `server.mjs::buildReviewHtml()`의 HTML 빌더 영역(363~738줄) 전체 재작성. sticky 헤더 + 3열 그리드 + 컴팩트 표.
+- 또는 Phase C (admin 코멘트 워크플로 stepper) 병행 가능 (서로 다른 파일).
+
+### 검증
+- server.mjs 문법 정상 (`OK` 출력 확인). 단, 포트 4173에 이전 서버 살아있어 실제 기동 안 됨.
+- styles.css는 정적 파일이라 브라우저 새로고침으로 반영. server.mjs의 inline 스타일은 서버 재시작 필요.
+- 사용자가 직접 확인하려면:
+  1. PowerShell에서 `Get-Process node | Stop-Process` (또는 작업 관리자에서 node 종료)
+  2. `scripts/03_start_admin.cmd` 다시 실행
+  3. `http://127.0.0.1:4173/admin`, `/archive`, `/reports/2025-12-23` 브라우저에서 확인
+  4. 변경점: 페이지 배경 살짝 더 차가운 흰색(`#fafbfc`), 폰트 Pretendard, CTA 버튼 검정 → Stripe 블루(`#1f4ed8`)
+
+---
+
 ## 2026-05-17 — 집 PC, Claude — 플랜 수립 및 추적 인프라 구축
 
 ### 의도

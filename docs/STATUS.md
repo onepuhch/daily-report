@@ -3,22 +3,26 @@
 > 한눈에 보는 진척판. LOG가 길어져도 이 파일만 보면 즉시 위치 파악 가능.
 > 작업 진행 시 이 파일을 **항상 최신으로 덮어쓰기**.
 
-**전체 진행률**: 0 / 6 Phase 완료 (플랜 수립 완료, 코드 작업 미시작)
+**전체 진행률**: 1 / 6 Phase 완료 (Phase A 완료)
 
-**마지막 갱신**: 2026-05-17 (집 PC, Claude)
-**다음 세션 시작점**: 회사 PC 도착 후 `git pull` → 아래 "다음 작업" 항목 확인
+**마지막 갱신**: 2026-05-17 (집 PC, Claude — Phase A 완료)
+**다음 세션 시작점**: 회사 PC 도착 후 `git pull` → 아래 "다음 작업" 항목 확인. Phase B 진입.
 
 ---
 
 ## Phase A — 디자인 시스템 정립
-- **상태**: pending
-- **다음 작업**: `design.md` 전체 재작성 (Notion 마케팅 디자인 → 금융 대시보드 디자인 시스템). 그 후 `src/daily_report/admin/styles.css`의 `:root` CSS 변수 갱신, `server.mjs::buildReviewHtml` 내부 inline `<style>` 블록도 동일 토큰 적용.
+- **상태**: done ✓
+- **완료 내용**:
+  - `design.md` 전체 재작성 (Stripe + KIS 스타일 금융 대시보드 디자인 시스템)
+  - `styles.css` `:root` 신규 토큰 + 백워드 호환 alias, Pretendard 폰트 적용
+  - `server.mjs::buildReviewHtml` inline `<style>` 토큰 동기화
+- **남은 확인**: 사용자가 서버 재시작 후 브라우저에서 색·폰트 시각 확인 필요
 - **블로커**: 없음
 
 ## Phase B — 공개 리포트 페이지 재작성
-- **상태**: pending
-- **다음 작업**: `server.mjs::buildReviewHtml()` 함수(363–738줄)의 HTML 빌더 부분 재작성. 새 구조: sticky 헤더 + 코멘트 카드 + 3열 카테고리 그리드. 데이터 헬퍼는 보존.
-- **블로커**: Phase A 완료 권장 (디자인 토큰 의존)
+- **상태**: pending (다음 진입 권장)
+- **다음 작업**: `server.mjs::buildReviewHtml()` 함수(363–738줄)의 HTML 빌더 부분 재작성. 새 구조: sticky 헤더 + 코멘트 카드 + 3열 카테고리 그리드. 데이터 헬퍼는 보존. 인라인 스타일은 새 디자인 토큰(`--up`, `--down`, `--accent`, `--surface` 등) 사용.
+- **블로커**: Phase A 완료됨 (해제)
 
 ## Phase C — Admin 코멘트 워크플로 단순화
 - **상태**: pending

@@ -1,22 +1,77 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
 :root {
-  --canvas: #ffffff;
-  --surface: #f7f7f5;
-  --surface-soft: #fbfbfa;
-  --ink: #1f1f1f;
-  --muted: #6b6f76;
-  --faint: #9b9fa6;
-  --hairline: #e7e5e0;
-  --hairline-strong: #d4d1ca;
-  --primary: #252525;
-  --primary-pressed: #111111;
-  --green: #0f7a4d;
-  --red: #b42318;
-  --blue: #2f5f9f;
-  --orange: #b45309;
-  --blue-soft: #edf4ff;
-  --purple-soft: #f2efff;
-  --green-soft: #edf8f2;
-  --shadow: 0 12px 32px rgba(15, 15, 15, 0.06);
+  /* === New design system tokens (see design.md) === */
+  --bg: #fafbfc;
+  --surface: #ffffff;
+  --border: #e6e8eb;
+  --border-strong: #d1d5db;
+
+  --text: #1a1f2e;
+  --text-strong: #0a0e1a;
+  --muted: #6b7280;
+  --subtle: #9ca3af;
+
+  /* Accent (Stripe blue) */
+  --accent: #1f4ed8;
+  --accent-hover: #1846c4;
+  --accent-soft: #eef2ff;
+
+  /* Semantic — 한국 금융 관례: 상승 빨강 / 하락 파랑 */
+  --up: #d92d20;
+  --up-soft: #fef3f2;
+  --down: #1570ef;
+  --down-soft: #eff8ff;
+  --flat: #6b7280;
+  --warning: #b54708;
+  --error: #b42318;
+
+  /* Status badges */
+  --status-draft: #6b7280;
+  --status-reviewed: #1f4ed8;
+  --status-published: #067647;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-2: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 12px 32px rgba(15, 23, 42, 0.16);
+
+  /* Type */
+  --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI",
+               "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+
+  /* === Backward-compat aliases (Phase A — Phase B/C에서 점진적 제거) === */
+  --canvas: var(--surface);          /* old: #ffffff */
+  --surface-soft: var(--bg);         /* old: #fbfbfa → 살짝 어두운 배경 */
+  --ink: var(--text);
+  --faint: var(--subtle);
+  --hairline: var(--border);
+  --hairline-strong: var(--border-strong);
+  --primary: var(--accent);          /* old: #252525 black → Stripe blue */
+  --primary-pressed: var(--accent-hover);
+  --green: var(--status-published);  /* old: #0f7a4d → 동일 톤 녹색 */
+  --red: var(--up);                  /* old #b42318 → 같은 빨강 계열 */
+  --blue: var(--down);               /* old #2f5f9f → 같은 파랑 계열 */
+  --orange: var(--warning);
+  --blue-soft: var(--down-soft);
+  --purple-soft: var(--accent-soft); /* purple은 새 시스템에서 사용 안 함 → accent로 대체 */
+  --green-soft: #ecfdf5;             /* 옅은 녹색 (status published 강조용) */
+  --shadow: var(--shadow-3);
 }
 
 * {
@@ -30,9 +85,9 @@ body {
 }
 
 body {
-  background: var(--surface);
-  color: var(--ink);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
   font-size: 14px;
   letter-spacing: 0;
 }
