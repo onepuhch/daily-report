@@ -5,6 +5,58 @@
 
 ---
 
+## 2026-05-17 — 집 PC, Claude — Phase C 골격 완료 (참고메모-first 워크플로)
+
+### 의도
+Phase A 직후 사용자 피드백: "숫자 기반 자동 초안" 대신 **"참고 자료(텔레그램·뉴스 등) → 메모 기반 AI 초안 → 최종"** 흐름을 원함. 채권 운용 데스크 실제 업무 흐름.
+
+- 새 의사결정 기록 (D-009 워크플로 재설계, D-010 LLM 미연동 placeholder, D-011 뉴스 크롤링 별도 Phase)
+- Phase C 범위 재설계 — 골격(UI + 상태)까지만, LLM·뉴스는 차기 Phase H/I로 분리
+- 데이터 파이프라인(`scripts/` Excel·인포맥스 추출)은 손대지 않음 (사용자 확인 요청에 명시적으로 답함)
+
+### 진행
+- `docs/DECISIONS.md`에 D-009, D-010, D-011 추가
+- `docs/REDESIGN_PLAN.md` Phase C 섹션 전면 갱신 + Phase H, I 추가
+- `docs/STATUS.md` Phase C 상태 in_progress, 차기 Phase H/I 추가
+- `src/daily_report/admin/index.html` 코멘트 패널을 3단 stepper로 교체:
+  - Step 1 "참고 자료" — 단일 textarea (텔레그램·뉴스·메모 통합 입력), "전일 뉴스 가져오기" placeholder 버튼(disabled)
+  - Step 2 "AI 초안 생성" — LLM 미연동 안내 배너 + 기존 draft API 호출 버튼 + 초안 textarea
+  - Step 3 "최종 작성 & 발행" — 최종 textarea + 단일 "저장 및 발행" 버튼
+  - 제거: 기존 4-textarea 구조, "저장 SQL 생성" 버튼, "Supabase에 직접 저장" 버튼 중복, SQL 출력 textarea
+- `src/daily_report/admin/app.js`:
+  - `els.saveButton`, `els.sqlOutput` 참조 제거
+  - `saveComment()` 함수 삭제 (SQL 저장 경로)
+  - `uploadToSupabase()` 메시지 문구 "저장·발행 완료"로 개선
+  - 이벤트 리스너 정리 (saveButton 제거)
+- `src/daily_report/admin/styles.css` 끝부분에 stepper 스타일 추가:
+  - `.comment-pane.stepper`, `.step-card`, `.step-header`, `.step-number`, `.step-actions`
+  - `.notice`, `.notice-warn`, `.notice-info` (안내 배너)
+  - 신규 디자인 토큰(`--accent`, `--accent-soft`, `--border`, `--surface`, `--radius-*`) 사용
+- 검증: `node --check`로 app.js, server.mjs 문법 OK 확인
+
+### 결정
+- Phase C 골격 작업 = HTML/JS/CSS 까지. LLM 호출·뉴스 수집은 별도 Phase.
+- 기존 `/api/comments/{date}/draft` 엔드포인트 재사용 (reference_note 파라미터 이미 지원). UI는 새 흐름이지만 백엔드는 그대로.
+- "메모 기반 초안 생성" 버튼은 작동은 하되 LLM 미연동 안내 배너 표시.
+- 저장 경로: `/api/comments/{date}` (SQL 저장) 폐기, `/api/supabase/reports/{date}` 단일 경로로 통일.
+
+### 미완 / 다음 단계
+- **사용자 확인 필요**: 서버 재시작 → admin 페이지에서 stepper 동작 확인 (참고 자료 입력 → 초안 생성 → 최종 작성 → 저장).
+- Phase B (공개 리포트 재작성) 또는 Phase D (AI 질문 하단 바)로 진입.
+- 차기 Phase H: 실제 LLM 호출 통합 (provider 결정 후)
+- 차기 Phase I: 뉴스 자동 수집
+
+### 검증
+- `node --check`로 JS 문법 정상
+- 시각·동작 검증은 사용자가 서버 재시작 후 수행 필요:
+  1. PowerShell: `Get-Process node | Stop-Process -Force`
+  2. `scripts\03_start_admin.cmd` 실행
+  3. `http://127.0.0.1:4173/admin` 접속, Ctrl+F5 새로고침
+  4. 코멘트 패널이 3단 카드(번호 1/2/3) 구조로 표시되는지
+  5. 참고 자료 textarea가 맨 위인지, "전일 뉴스 가져오기" 버튼이 비활성 + 노란 안내 배너 표시되는지
+
+---
+
 ## 2026-05-17 — 집 PC, Claude — Phase A 완료 (디자인 시스템 정립)
 
 ### 의도

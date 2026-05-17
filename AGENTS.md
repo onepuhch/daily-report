@@ -2,7 +2,7 @@
 
 ## 현재 진행 중 (UI 리디자인)
 - **활성 Phase**: B (공개 리포트 재작성) — 다음 진입 예정
-- **전체 진척**: 1/6 (Phase A 완료)
+- **전체 진척**: 2/6 (Phase A + C 골격 완료)
 - **다음 행동**: `docs/STATUS.md` 읽고 "다음 작업" 항목 진행
 - **전체 플랜**: `docs/REDESIGN_PLAN.md`
 - **작업 일지**: `docs/REDESIGN_LOG.md` (시간 역순, 최신이 위)

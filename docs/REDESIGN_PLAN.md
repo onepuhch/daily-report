@@ -87,24 +87,39 @@
 
 ---
 
-### Phase C — Admin 코멘트 워크플로 단순화
+### Phase C — Admin 코멘트 워크플로 재설계 (참고메모-first)
+
+> **2026-05-17 갱신**: D-009 결정 반영. 기존 "숫자 기반 초안 → 메모" 흐름을 폐기하고 "참고 자료 → AI 초안 → 최종" 흐름으로 변경.
 
 **수정 파일**
-- `src/daily_report/admin/index.html` (코멘트 패널 마크업)
-- `src/daily_report/admin/app.js` (워크플로 상태 관리)
-- `src/daily_report/admin/styles.css`
+- `src/daily_report/admin/index.html` (코멘트 패널 마크업 전면 교체)
+- `src/daily_report/admin/app.js` (워크플로 상태 재구성)
+- `src/daily_report/admin/styles.css` (stepper 컴포넌트 스타일 추가)
 
-**변경 내용**
-- textarea 4개 → 3단 stepper:
-  - **1단계 — 초안 생성**: 자동초안 + 참고메모를 단일 textarea로 통합. "초안 생성" 버튼이 `/api/comments/{date}/draft` 호출.
-  - **2단계 — 최종 작성**: 단일 textarea. 좌측에 1단계 결과 읽기전용 미니뷰.
-  - **3단계 — 발행**: 미리보기 패널 + 단일 "저장 및 발행" 버튼이 `/api/supabase/reports/{date}` 호출.
-- "SQL 출력" textarea 삭제. "저장 SQL 생성" 버튼 삭제. 하나의 저장 플로로 통일.
-- 상태 드롭다운(draft/reviewed/published)은 3단계 영역에 inline으로.
+**변경 내용 — 3단 stepper**
 
-**재사용**: `/api/comments/{date}/draft`, `/api/supabase/reports/{date}` POST.
+**Step 1 — 참고 자료** (맨 위, 가장 큰 영역)
+- 단일 textarea: 텔레그램 본문 / 뉴스 요약 / 자유 메모 모두 붙여넣기
+- placeholder 안내: "텔레그램 메시지, 뉴스 기사, 자유 메모 등 코멘트 작성에 참고할 자료를 붙여 넣으세요. URL은 차기 버전에서 자동 파싱 예정."
+- "전일 뉴스 가져오기" 버튼 placeholder (disabled, tooltip: "차기 Phase에서 구현 — D-011")
 
-**검증**: 초안 생성 → 편집 → 발행 후 공개 리포트 페이지에 반영되는지.
+**Step 2 — AI 초안 생성**
+- 버튼 "메모 기반 초안 생성" → 현재는 `/api/comments/{date}/draft` 호출 (reference_note 전달). 실제 LLM 호출은 차기 (D-010).
+- 안내 배너: "LLM 미연동 — 현재는 숫자 기반 초안. AI provider 결정 후 메모 기반 LLM 초안으로 교체 예정."
+- textarea: 생성된 초안 표시, 편집 가능
+
+**Step 3 — 최종 작성 & 발행**
+- textarea: 최종 코멘트
+- 상태 드롭다운 (draft / reviewed / published)
+- 단일 "저장 및 발행" 버튼 → `/api/supabase/reports/{date}` POST
+
+**제거**
+- "SQL 출력" textarea
+- "저장 SQL 생성" 버튼 (Supabase 저장만 유지)
+
+**재사용**: `/api/comments/{date}/draft` (reference_note 파라미터 이미 존재), `/api/supabase/reports/{date}`. `comment` 객체 스키마(`auto_comment`, `reference_note`, `final_comment`, `status`) 유지.
+
+**검증**: 참고 메모 입력 → 초안 생성 버튼 → 최종 다듬기 → 저장 후 공개 페이지 반영.
 
 ---
 
@@ -166,6 +181,22 @@
 ### Phase G (차기 범위 — 1차 미포함)
 
 PNG/PDF 내보내기. 이번 리디자인 안정화 후 별도 진행. html2canvas + 인쇄 CSS 활용 예정.
+
+### Phase H — LLM 통합 (차기 범위)
+
+D-010 결정. Phase C의 "메모 기반 초안 생성" placeholder를 실제 LLM 호출로 교체.
+- AI provider 결정 (OpenAI / Anthropic / 사내 LLM) 필요
+- `server.mjs::generateAutoComment` 함수에 LLM 호출 로직 추가
+- 입력: `reference_note` (참고 자료) + 오늘 시장 숫자 → 출력: 채권 운용 관점 코멘트 초안
+- 프롬프트 설계 + 토큰 비용 관리
+
+### Phase I — 뉴스 자동 수집 (차기 범위)
+
+D-011 결정. 전일 채권 관련 뉴스를 자동 수집해 참고 자료 textarea에 시드.
+- 데이터 소스 후보: RSS (한경·이데일리) / 인포맥스 채권 섹션 스크래핑 / 유료 뉴스 API
+- ToS·저작권 검토 필요
+- 채권 키워드 필터: 금리, 채권, 국고채, 회사채, FOMC, 한은, 기준금리 등
+- Phase C의 "전일 뉴스 가져오기" placeholder 버튼을 활성화
 
 ---
 

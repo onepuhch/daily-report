@@ -21,10 +21,8 @@ const els = {
   referenceInput: document.querySelector('#referenceInput'),
   finalCommentInput: document.querySelector('#finalCommentInput'),
   draftButton: document.querySelector('#draftButton'),
-  saveButton: document.querySelector('#saveButton'),
   uploadButton: document.querySelector('#uploadButton'),
   saveMessage: document.querySelector('#saveMessage'),
-  sqlOutput: document.querySelector('#sqlOutput'),
 };
 
 function escapeHtml(value) {
@@ -163,7 +161,6 @@ function setCommentForm(comment) {
   els.referenceInput.value = comment?.reference_note || '';
   els.finalCommentInput.value = comment?.final_comment || '';
   els.statusInput.value = comment?.status || 'draft';
-  els.sqlOutput.value = '';
   els.saveMessage.textContent = '';
   els.saveMessage.className = 'save-message';
 }
@@ -216,35 +213,6 @@ function getCommentPayload() {
   };
 }
 
-async function saveComment() {
-  if (!state.currentDate) return;
-
-  els.saveButton.disabled = true;
-  els.saveMessage.textContent = '저장 중입니다...';
-  els.saveMessage.className = 'save-message';
-
-  try {
-    const result = await fetchJson(`/api/comments/${state.currentDate}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(getCommentPayload()),
-    });
-
-    state.currentReport.comment = result.comment;
-    state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
-    els.summaryStatus.textContent = result.comment.status;
-    els.previewLink.href = `/${state.currentReport.preview_html}`;
-    els.sqlOutput.value = result.sql;
-    els.saveMessage.textContent = `${result.comment_file} 저장, ${result.sql_file} 생성, ${result.review_html} 생성`;
-    els.saveMessage.className = 'save-message ok';
-  } catch (error) {
-    els.saveMessage.textContent = error.message;
-    els.saveMessage.className = 'save-message error';
-  } finally {
-    els.saveButton.disabled = false;
-  }
-}
-
 async function generateDraft() {
   if (!state.currentDate) return;
 
@@ -276,7 +244,6 @@ async function uploadToSupabase() {
   if (!state.currentDate) return;
 
   els.uploadButton.disabled = true;
-  els.saveButton.disabled = true;
   els.saveMessage.textContent = 'Supabase에 저장 중입니다...';
   els.saveMessage.className = 'save-message';
 
@@ -291,21 +258,18 @@ async function uploadToSupabase() {
     state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
     els.summaryStatus.textContent = result.comment.status;
     els.previewLink.href = `/${state.currentReport.preview_html}`;
-    els.sqlOutput.value = result.sql;
-    els.saveMessage.textContent = `Supabase 저장 완료: ${result.supabase.report_date}, ${result.supabase.observation_count}개 지표`;
+    els.saveMessage.textContent = `저장·발행 완료: ${result.supabase.report_date}, ${result.supabase.observation_count}개 지표`;
     els.saveMessage.className = 'save-message ok';
   } catch (error) {
-    els.saveMessage.textContent = `Supabase 저장 실패: ${error.message}`;
+    els.saveMessage.textContent = `저장 실패: ${error.message}`;
     els.saveMessage.className = 'save-message error';
   } finally {
     els.uploadButton.disabled = false;
-    els.saveButton.disabled = false;
   }
 }
 
 els.refreshButton.addEventListener('click', () => loadReports());
 els.draftButton.addEventListener('click', generateDraft);
-els.saveButton.addEventListener('click', saveComment);
 els.uploadButton.addEventListener('click', uploadToSupabase);
 
 loadReports().catch((error) => {

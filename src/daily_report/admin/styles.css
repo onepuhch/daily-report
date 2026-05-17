@@ -511,6 +511,82 @@ select {
   color: var(--red);
 }
 
+/* === Comment workflow stepper === */
+
+.comment-pane.stepper {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.step-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.step-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.step-header p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 2px 0 0;
+}
+
+.step-number {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.step-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.notice {
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.notice-warn {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: var(--warning);
+}
+
+.notice-info {
+  background: var(--accent-soft);
+  border: 1px solid #c7d2fe;
+  color: var(--accent);
+}
+
+/* === legacy SQL field — Phase C에서 마크업 제거됨, 셀렉터는 다른 곳 없으므로 보존만 === */
 .sql-field textarea {
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 12px;
