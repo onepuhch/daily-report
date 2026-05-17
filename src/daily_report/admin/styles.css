@@ -7,10 +7,11 @@
   --faint: #9b9fa6;
   --hairline: #e7e5e0;
   --hairline-strong: #d4d1ca;
-  --primary: #5b4bdb;
-  --primary-pressed: #4637b8;
+  --primary: #252525;
+  --primary-pressed: #111111;
   --green: #0f7a4d;
   --red: #b42318;
+  --blue: #2f5f9f;
   --orange: #b45309;
   --blue-soft: #edf4ff;
   --purple-soft: #f2efff;
@@ -194,6 +195,10 @@ textarea {
   background: var(--primary-pressed);
 }
 
+.button.full-width {
+  width: 100%;
+}
+
 .button.secondary,
 .button.ghost {
   background: var(--canvas);
@@ -374,13 +379,13 @@ tbody tr:last-child td {
 }
 
 .change.up {
-  background: var(--green-soft);
-  color: var(--green);
+  background: #fff1f0;
+  color: var(--red);
 }
 
 .change.down {
-  background: #fff1f0;
-  color: var(--red);
+  background: var(--blue-soft);
+  color: var(--blue);
 }
 
 .change.flat {
@@ -463,6 +468,202 @@ select {
   text-align: center;
 }
 
+.archive-shell {
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.archive-sidebar {
+  background: var(--canvas);
+  border-right: 1px solid var(--hairline);
+  height: 100vh;
+  overflow: auto;
+  padding: 22px 16px;
+  position: sticky;
+  top: 0;
+}
+
+.archive-search {
+  margin: 18px 0 12px;
+}
+
+.archive-main {
+  min-width: 0;
+  padding: 24px;
+}
+
+.archive-topbar {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.archive-topbar h2,
+.archive-question h3 {
+  margin: 0;
+}
+
+.archive-topbar h2 {
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.archive-question {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.archive-question h3 {
+  font-size: 18px;
+  font-weight: 650;
+  margin-top: 3px;
+}
+
+.ask-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 94px;
+}
+
+.ask-button {
+  width: 94px;
+}
+
+.answer-box {
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  min-height: 86px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.chart-box {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.chart-box.empty {
+  background: var(--surface-soft);
+}
+
+.chart-head {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.chart-head h4,
+.chart-head p {
+  margin: 0;
+}
+
+.chart-head h4 {
+  font-size: 16px;
+  font-weight: 650;
+  margin-top: 3px;
+}
+
+.chart-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-canvas {
+  color: var(--muted);
+  min-height: 160px;
+}
+
+.metric-svg {
+  display: block;
+  height: 220px;
+  width: 100%;
+}
+
+.axis {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.series-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.series-point {
+  fill: var(--canvas);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.chart-caption,
+.single-point {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.chart-caption strong,
+.single-point strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.single-point {
+  align-items: center;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  min-height: 138px;
+  padding: 18px;
+}
+
+.report-frame-wrap {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  height: calc(100vh - 236px);
+  min-height: 560px;
+  overflow: hidden;
+}
+
+#reportFrame {
+  border: 0;
+  height: 100%;
+  width: 100%;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -479,6 +680,19 @@ select {
 
   .comment-pane {
     position: static;
+  }
+
+  .archive-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-sidebar {
+    height: auto;
+    position: static;
+  }
+
+  .report-frame-wrap {
+    height: 720px;
   }
 }
 
@@ -510,5 +724,27 @@ select {
 
   .summary-strip > div:last-child {
     border-bottom: 0;
+  }
+
+  .archive-main {
+    padding: 16px;
+  }
+
+  .archive-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ask-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ask-button {
+    width: 100%;
+  }
+
+  .report-frame-wrap {
+    height: 680px;
+    min-height: 480px;
   }
 }

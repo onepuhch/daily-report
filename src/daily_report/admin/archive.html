@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Daily Report Archive</title>
+    <link rel="stylesheet" href="/admin/styles.css">
+  </head>
+  <body>
+    <div class="archive-shell">
+      <aside class="archive-sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">DR</div>
+          <div>
+            <h1>Daily Report</h1>
+            <p>Archive</p>
+          </div>
+        </div>
+        <a class="button secondary full-width" href="/admin">관리자 화면</a>
+        <div class="archive-search">
+          <label class="field">
+            <span>리포트 검색</span>
+            <input id="reportSearch" type="search" placeholder="날짜, 상태 검색">
+          </label>
+        </div>
+        <div id="archiveList" class="report-list"></div>
+      </aside>
+
+      <main class="archive-main">
+        <header class="archive-topbar">
+          <div>
+            <p class="eyebrow">Market Daily</p>
+            <h2 id="archiveTitle">리포트를 불러오는 중</h2>
+          </div>
+          <a id="openReportLink" class="button secondary" href="#" target="_blank" rel="noreferrer">새 창에서 열기</a>
+        </header>
+
+        <section class="archive-question">
+          <div>
+            <p class="eyebrow">Local Q&A</p>
+            <h3>지표 질문</h3>
+          </div>
+          <form id="askForm" class="ask-form">
+            <input id="questionInput" type="search" placeholder="예: 원달러 환율 어땠어? / 금리 변동 알려줘">
+            <button class="button primary ask-button" type="submit">질문</button>
+          </form>
+          <pre id="answerBox" class="answer-box">질문을 입력하면 현재 선택한 리포트의 숫자와 코멘트에서 관련 내용을 찾습니다.</pre>
+          <div id="chartBox" class="chart-box empty">
+            <div class="chart-head">
+              <div>
+                <p class="eyebrow">Metric Chart</p>
+                <h4 id="chartTitle">선택 지표 추이</h4>
+              </div>
+              <span id="chartMeta">질문 후 자동 표시</span>
+            </div>
+            <div id="chartCanvas" class="chart-canvas">질문 결과와 연결된 지표 추이가 여기에 표시됩니다.</div>
+          </div>
+        </section>
+
+        <section class="report-frame-wrap">
+          <iframe id="reportFrame" title="Daily report preview"></iframe>
+        </section>
+      </main>
+    </div>
+
+    <script src="/admin/archive.js"></script>
+  </body>
+</html>

@@ -26,7 +26,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Market Daily</p>
-            <h2 id="reportTitle">리포트 불러오는 중</h2>
+            <h2 id="reportTitle">리포트를 불러오는 중</h2>
           </div>
           <div class="topbar-actions">
             <a id="previewLink" class="button secondary" href="#" target="_blank" rel="noreferrer">HTML 미리보기</a>
@@ -93,31 +93,22 @@
 
             <label class="field">
               <span>자동 코멘트 초안</span>
-              <textarea id="autoCommentInput" rows="5" placeholder="AI 코멘트 초안이 들어갈 자리"></textarea>
+              <textarea id="autoCommentInput" rows="5" placeholder="나중에 AI가 작성한 초안이 들어갈 영역입니다. 지금은 비워둬도 됩니다."></textarea>
             </label>
+            <button id="draftButton" class="button secondary full-width" type="button">숫자로 자동 초안 생성</button>
 
             <label class="field">
               <span>참고 메모</span>
-              <textarea id="referenceInput" rows="6" placeholder="텔레그램/뉴스/내 메모"></textarea>
+              <textarea id="referenceInput" rows="6" placeholder="텔레그램, 뉴스, 내부 메모 등 코멘트 작성에 참고한 내용을 붙여 넣습니다."></textarea>
             </label>
 
             <label class="field">
               <span>최종 코멘트</span>
-              <textarea id="finalCommentInput" rows="8" placeholder="실제로 리포트에 들어갈 문장"></textarea>
+              <textarea id="finalCommentInput" rows="8" placeholder="실제 리포트에 들어갈 최종 문장을 작성합니다."></textarea>
             </label>
 
-            <div class="inline-fields">
-              <label class="field">
-                <span>태그</span>
-                <input id="tagsInput" type="text" placeholder="금리, 환율">
-              </label>
-              <label class="field">
-                <span>검토자</span>
-                <input id="approvedByInput" type="text" placeholder="자금운용본부">
-              </label>
-            </div>
-
             <button id="saveButton" class="button primary" type="button">저장 SQL 생성</button>
+            <button id="uploadButton" class="button secondary full-width" type="button">Supabase에 직접 저장</button>
             <p id="saveMessage" class="save-message" role="status"></p>
 
             <label class="field sql-field">

@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
-import { readFile, readdir, mkdir, writeFile, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +38,93 @@ function isDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function parseJson(raw) {
+  return JSON.parse(raw.replace(/^\uFEFF/, ''));
+}
+
+async function readDotEnv() {
+  const values = {};
+  let raw = '';
+
+  try {
+    raw = await readFile(path.join(projectRoot, '.env'), 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return values;
+    throw error;
+  }
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const index = trimmed.indexOf('=');
+    if (index === -1) continue;
+
+    const key = trimmed.slice(0, index).trim();
+    const value = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, '');
+    values[key] = value;
+  }
+
+  return values;
+}
+
+async function getSupabaseConfig() {
+  const env = await readDotEnv();
+  const url = process.env.SUPABASE_URL || env.SUPABASE_URL || '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const anonKey = process.env.SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '';
+  const key = serviceRoleKey && !serviceRoleKey.startsWith('your-') ? serviceRoleKey : anonKey;
+
+  if (!url || url.includes('your-project-ref')) {
+    const error = new Error('SUPABASE_URL is missing in .env.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!key || key.startsWith('your-')) {
+    const error = new Error('SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY is missing in .env.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    url: url.replace(/\/+$/, ''),
+    key,
+  };
+}
+
+async function supabaseRest(method, apiPath, body, extraHeaders = {}) {
+  const config = await getSupabaseConfig();
+  const headers = {
+    apikey: config.key,
+    authorization: `Bearer ${config.key}`,
+    'content-type': 'application/json',
+    prefer: 'resolution=merge-duplicates,return=representation',
+    ...extraHeaders,
+  };
+
+  const response = await fetch(`${config.url}/rest/v1/${apiPath}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    let message = data?.message || data?.hint || text || `Supabase request failed: ${response.status}`;
+    if (response.status === 403 && String(message).includes('permission denied')) {
+      message = `${message}. Check SUPABASE_SERVICE_ROLE_KEY in .env, or add Supabase write policies for this table.`;
+    }
+    const error = new Error(message);
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
 function sqlString(value) {
   if (value === null || value === undefined || value === '') {
     return 'NULL';
@@ -62,8 +149,593 @@ function normalizeStatus(value) {
   return allowed.has(value) ? value : 'reviewed';
 }
 
-function parseJson(raw) {
-  return JSON.parse(raw.replace(/^\uFEFF/, ''));
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+
+  if (Math.abs(number) >= 1000) {
+    return number.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  }
+
+  return number.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
+}
+
+function formatChange(value, unit) {
+  if (value === null || value === undefined || value === '') {
+    return '<span class="flat">-</span>';
+  }
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return `<span class="flat">${escapeHtml(value)}</span>`;
+  }
+
+  const className = number > 0 ? 'up' : number < 0 ? 'down' : 'flat';
+  const sign = number > 0 ? '+' : '';
+  return `<span class="${className}">${sign}${formatNumber(number)}${escapeHtml(unit || '')}</span>`;
+}
+
+function formatChangeText(value, unit) {
+  if (value === null || value === undefined || value === '') return '변동 데이터 없음';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  const sign = number > 0 ? '+' : '';
+  return `${sign}${formatNumber(number)}${unit || ''}`;
+}
+
+function directionText(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return '보합';
+  return number > 0 ? '상승' : '하락';
+}
+
+function formatDateKo(value) {
+  if (!value) return '-';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+}
+
+function formatDateTimeKo(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function textToParagraphs(value) {
+  const lines = String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return '<p class="muted">최종 코멘트가 아직 작성되지 않았습니다.</p>';
+  }
+
+  return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n');
+}
+
+function groupObservations(observations) {
+  const groups = new Map();
+
+  for (const item of observations || []) {
+    const key = item.category || 'other';
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: item.category_label || key,
+        rows: [],
+      });
+    }
+    groups.get(key).rows.push(item);
+  }
+
+  return [...groups.values()];
+}
+
+function getMetric(report, key) {
+  return (report.observations || []).find((item) => item.metric_key === key);
+}
+
+function describeMetric(item) {
+  if (!item) return null;
+  const value = `${formatNumber(item.value)}${item.unit ? item.unit : ''}`;
+  const change = formatChangeText(item.change_1d, item.change_1d_unit);
+  return `${item.metric_name} ${value}, 전일대비 ${change} ${directionText(item.change_1d)}`;
+}
+
+function buildAutoCommentDraft(report, referenceNote = '') {
+  const kr10y = getMetric(report, 'kr_gov_10y');
+  const us10y = getMetric(report, 'us_treasury_10y');
+  const kospi = getMetric(report, 'kospi');
+  const kosdaq = getMetric(report, 'kosdaq');
+  const sp500 = getMetric(report, 'sp500');
+  const nasdaq = getMetric(report, 'nasdaq');
+  const usdkrw = getMetric(report, 'usdkrw');
+  const dollarIndex = getMetric(report, 'dollar_index');
+  const gold = getMetric(report, 'gold');
+  const wti = getMetric(report, 'wti');
+  const btc = getMetric(report, 'btc_usd');
+
+  const paragraphs = [];
+  const rates = [describeMetric(kr10y), describeMetric(us10y)].filter(Boolean);
+  if (rates.length > 0) {
+    paragraphs.push(`금리는 ${rates.join(', ')} 흐름을 보였습니다.`);
+  }
+
+  const equities = [describeMetric(kospi), describeMetric(kosdaq), describeMetric(sp500), describeMetric(nasdaq)].filter(Boolean);
+  if (equities.length > 0) {
+    paragraphs.push(`주식시장은 ${equities.join(', ')}했습니다.`);
+  }
+
+  const fxCommodity = [describeMetric(usdkrw), describeMetric(dollarIndex), describeMetric(gold), describeMetric(wti), describeMetric(btc)].filter(Boolean);
+  if (fxCommodity.length > 0) {
+    paragraphs.push(`환율과 기타 자산은 ${fxCommodity.join(', ')}했습니다.`);
+  }
+
+  const movers = (report.observations || [])
+    .filter((item) => Number.isFinite(Number(item.change_1d)))
+    .sort((a, b) => Math.abs(Number(b.change_1d)) - Math.abs(Number(a.change_1d)))
+    .slice(0, 4)
+    .map((item) => `${item.metric_name} ${formatChangeText(item.change_1d, item.change_1d_unit)}`);
+
+  if (movers.length > 0) {
+    paragraphs.push(`전일대비 변동폭은 ${movers.join(', ')} 순으로 크게 나타났습니다.`);
+  }
+
+  if (String(referenceNote || '').trim()) {
+    paragraphs.push('참고 메모에 적은 이벤트와 수급 요인을 확인해 위 숫자 흐름의 원인을 최종 코멘트에 보강하세요.');
+  }
+
+  paragraphs.push('위 문장은 숫자 기반 자동 초안입니다. 실제 발행 전에는 당일 뉴스, 수급, 정책 이벤트를 확인해 표현을 다듬어야 합니다.');
+  return paragraphs.join('\n\n');
+}
+
+function buildHighlightCards(report) {
+  const highlights = [
+    getMetric(report, 'kr_gov_10y'),
+    getMetric(report, 'us_treasury_10y'),
+    getMetric(report, 'kospi'),
+    getMetric(report, 'sp500'),
+    getMetric(report, 'usdkrw'),
+    getMetric(report, 'btc_usd'),
+  ].filter(Boolean);
+
+  if (highlights.length === 0) return '';
+
+  return `
+    <section class="highlight-grid" aria-label="핵심 지표">
+      ${highlights.map((item) => `
+        <article class="highlight-card">
+          <span>${escapeHtml(item.category_label || item.category)}</span>
+          <strong>${escapeHtml(item.metric_name)}</strong>
+          <div class="highlight-value">${formatNumber(item.value)} <small>${escapeHtml(item.unit || '')}</small></div>
+          <div class="highlight-change">${formatChange(item.change_1d, item.change_1d_unit)}</div>
+        </article>
+      `).join('\n')}
+    </section>`;
+}
+
+function buildTopMoverList(report) {
+  const movers = (report.observations || [])
+    .filter((item) => Number.isFinite(Number(item.change_1d)))
+    .sort((a, b) => Math.abs(Number(b.change_1d)) - Math.abs(Number(a.change_1d)))
+    .slice(0, 6);
+
+  if (movers.length === 0) {
+    return '<p class="muted">전일대비 변동 데이터가 없습니다.</p>';
+  }
+
+  return `
+    <ol class="mover-list">
+      ${movers.map((item) => `
+        <li>
+          <div>
+            <strong>${escapeHtml(item.metric_name)}</strong>
+            <span>${escapeHtml(item.category_label || item.category)}</span>
+          </div>
+          ${formatChange(item.change_1d, item.change_1d_unit)}
+        </li>
+      `).join('\n')}
+    </ol>`;
+}
+
+function buildReviewHtml(report, comment) {
+  const reportDate = report.report_date;
+  const status = comment.status || 'draft';
+  const mainComment = comment.final_comment || comment.auto_comment || '';
+  const highlights = buildHighlightCards(report);
+  const topMovers = buildTopMoverList(report);
+  const workbookName = report.source_workbook ? path.basename(report.source_workbook) : '-';
+  const sections = groupObservations(report.observations).map((group) => {
+    const rows = group.rows.map((item) => `
+      <tr>
+        <td>
+          <strong>${escapeHtml(item.metric_name)}</strong>
+          <small>${escapeHtml(item.metric_key)}</small>
+        </td>
+        <td>${formatNumber(item.value)} <span class="muted">${escapeHtml(item.unit || '')}</span></td>
+        <td>${formatChange(item.change_1d, item.change_1d_unit)}</td>
+        <td>${formatChange(item.change_ytd, item.change_ytd_unit)}</td>
+        <td><span class="source">${escapeHtml(item.source_sheet || '-')}${item.source_cell ? `!${escapeHtml(item.source_cell)}` : ''}</span></td>
+      </tr>`).join('\n');
+
+    return `
+      <section class="section">
+        <div class="section-head">
+          <h2>${escapeHtml(group.label)}</h2>
+          <span>${group.rows.length}개 지표</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>지표</th>
+                <th>값</th>
+                <th>전일대비</th>
+                <th>YTD</th>
+                <th>출처</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </section>`;
+  }).join('\n');
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Market Daily - ${escapeHtml(reportDate)}</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --paper: #ffffff;
+      --ink: #252525;
+      --muted: #6f6f6f;
+      --line: #e6e4df;
+      --soft: #f1f0ed;
+      --soft-strong: #ebe8e2;
+      --red: #b42318;
+      --blue: #2f5f9f;
+      --green: #0f7a4d;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+      letter-spacing: 0;
+    }
+    main {
+      margin: 0 auto;
+      padding: 34px 0 64px;
+      width: min(1160px, calc(100% - 32px));
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      margin-bottom: 18px;
+      padding-bottom: 24px;
+    }
+    .kicker {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: clamp(34px, 5vw, 54px);
+      font-weight: 720;
+      line-height: 1.08;
+      margin: 0 0 14px;
+    }
+    .header-date {
+      align-self: end;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .header-date strong {
+      color: var(--ink);
+      display: block;
+      font-size: 18px;
+      margin-bottom: 2px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      align-items: center;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      display: inline-flex;
+      font-size: 13px;
+      min-height: 28px;
+      padding: 0 11px;
+    }
+    .report-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .report-nav a {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 7px 11px;
+      text-decoration: none;
+    }
+    .report-nav a:hover { color: var(--ink); }
+    .summary-layout {
+      align-items: stretch;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+      margin-bottom: 18px;
+    }
+    .comment {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .comment h2 {
+      font-size: 16px;
+      margin: 0 0 10px;
+    }
+    .comment p {
+      line-height: 1.7;
+      margin: 0 0 8px;
+    }
+    .comment p:last-child { margin-bottom: 0; }
+    .mover-panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 18px 14px;
+    }
+    .mover-panel h2 {
+      font-size: 16px;
+      margin: 0 0 12px;
+    }
+    .mover-list {
+      display: grid;
+      gap: 0;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .mover-list li {
+      align-items: center;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 10px 0;
+    }
+    .mover-list li:first-child { border-top: 0; padding-top: 0; }
+    .mover-list strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .mover-list span:not(.up):not(.down):not(.flat) {
+      color: var(--muted);
+      display: block;
+      font-size: 12px;
+    }
+    .highlight-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+    .highlight-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      min-width: 0;
+      padding: 14px;
+    }
+    .highlight-card span {
+      color: var(--muted);
+      display: block;
+      font-size: 11px;
+      font-weight: 650;
+      margin-bottom: 7px;
+    }
+    .highlight-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .highlight-value {
+      font-size: 19px;
+      font-weight: 720;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+    .highlight-value small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .highlight-change { font-size: 13px; }
+    .section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-top: 14px;
+      overflow: hidden;
+    }
+    .section-head {
+      align-items: center;
+      background: #fbfbfa;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 15px 18px;
+    }
+    .section-head h2 {
+      font-size: 17px;
+      margin: 0;
+    }
+    .section-head span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      border-collapse: collapse;
+      min-width: 760px;
+      width: 100%;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      padding: 12px 16px;
+      text-align: right;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    th {
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    tr:last-child td { border-bottom: 0; }
+    td strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+    td small {
+      color: var(--muted);
+      display: block;
+      font-size: 11px;
+    }
+    .muted { color: var(--muted); }
+    .up { color: var(--red); font-weight: 650; }
+    .down { color: var(--blue); font-weight: 650; }
+    .flat { color: var(--muted); font-weight: 650; }
+    .source {
+      color: var(--muted);
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      margin-top: 22px;
+      padding-top: 14px;
+    }
+    @media (max-width: 720px) {
+      main { padding-top: 22px; width: min(100% - 20px, 1180px); }
+      header { grid-template-columns: 1fr; }
+      .header-date { text-align: left; }
+      .summary-layout { grid-template-columns: 1fr; }
+      .highlight-grid { grid-template-columns: 1fr 1fr; }
+      .comment, .section-head { padding-left: 14px; padding-right: 14px; }
+      th, td { padding: 10px 12px; }
+    }
+    @media (min-width: 721px) and (max-width: 1020px) {
+      .highlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .summary-layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="kicker">Market Daily</div>
+        <h1>Daily Report</h1>
+        <div class="meta">
+          <span class="pill">기준일 ${escapeHtml(reportDate)}</span>
+          <span class="pill">작성 ${escapeHtml(report.author || '자금운용본부')}</span>
+          <span class="pill">상태 ${escapeHtml(status)}</span>
+        </div>
+      </div>
+      <div class="header-date">
+        <strong>${escapeHtml(formatDateKo(reportDate))}</strong>
+        <span>${escapeHtml(formatDateTimeKo(report.generated_at))} 생성</span>
+      </div>
+    </header>
+
+    <nav class="report-nav" aria-label="리포트 섹션">
+      <a href="#commentary">시장 코멘트</a>
+      <a href="#key-metrics">핵심 지표</a>
+      <a href="#details">상세 데이터</a>
+    </nav>
+
+    <div class="summary-layout">
+      <section id="commentary" class="comment">
+        <h2>시장 코멘트</h2>
+        ${textToParagraphs(mainComment)}
+      </section>
+      <aside class="mover-panel">
+        <h2>전일대비 주요 변동</h2>
+        ${topMovers}
+      </aside>
+    </div>
+
+    <div id="key-metrics">
+      ${highlights}
+    </div>
+
+    <div id="details">
+      ${sections}
+    </div>
+
+    <footer>Generated at ${escapeHtml(formatDateTimeKo())} · source workbook: ${escapeHtml(workbookName)}</footer>
+  </main>
+</body>
+</html>
+`;
 }
 
 async function getReportFiles() {
@@ -97,6 +769,18 @@ async function getReportFiles() {
   }));
 }
 
+async function readAllReports() {
+  const files = await getReportFiles();
+  const reports = [];
+
+  for (const file of files) {
+    const raw = await readFile(path.join(projectRoot, file.file), 'utf8');
+    reports.push(parseJson(raw));
+  }
+
+  return reports.sort((a, b) => String(a.report_date).localeCompare(String(b.report_date)));
+}
+
 async function readReport(date) {
   if (!isDate(date)) {
     const error = new Error('Invalid report date');
@@ -116,10 +800,157 @@ async function readReport(date) {
     if (error.code !== 'ENOENT') throw error;
   }
 
+  const reviewHtmlPath = path.join(outputDir, `market_daily_${date}.review.html`);
+  let previewHtml = `output/market_daily_${date}.html`;
+  try {
+    await stat(reviewHtmlPath);
+    previewHtml = `output/market_daily_${date}.review.html`;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
   return {
     ...report,
     comment,
-    preview_html: `output/market_daily_${date}.html`,
+    preview_html: previewHtml,
+    original_html: `output/market_daily_${date}.html`,
+  };
+}
+
+async function getMetricSeries(metricKey) {
+  const cleanMetricKey = String(metricKey || '').trim();
+  if (!cleanMetricKey) {
+    const error = new Error('metric_key is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const reports = await readAllReports();
+  const points = [];
+  let metricName = cleanMetricKey;
+  let categoryLabel = '';
+  let unit = '';
+
+  for (const report of reports) {
+    const item = (report.observations || []).find((observation) => observation.metric_key === cleanMetricKey);
+    if (!item) continue;
+
+    metricName = item.metric_name || metricName;
+    categoryLabel = item.category_label || categoryLabel;
+    unit = item.unit || unit;
+    points.push({
+      report_date: report.report_date,
+      value: item.value,
+      unit: item.unit,
+      change_1d: item.change_1d,
+      change_1d_unit: item.change_1d_unit,
+      change_ytd: item.change_ytd,
+      change_ytd_unit: item.change_ytd_unit,
+    });
+  }
+
+  return {
+    metric_key: cleanMetricKey,
+    metric_name: metricName,
+    category_label: categoryLabel,
+    unit,
+    points,
+  };
+}
+
+async function getLatestReportDate() {
+  const reports = await getReportFiles();
+  return reports[0]?.date || null;
+}
+
+function normalizeSearchText(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, '');
+}
+
+function scoreObservation(item, question) {
+  const text = normalizeSearchText([
+    item.metric_name,
+    item.metric_key,
+    item.category,
+    item.category_label,
+    item.unit,
+  ].join(' '));
+  const query = normalizeSearchText(question);
+  let score = 0;
+
+  if (query && text.includes(query)) score += 8;
+  for (const token of query.match(/[a-z0-9가-힣]+/g) || []) {
+    if (token.length >= 2 && text.includes(token)) score += 3;
+  }
+
+  const categoryHints = [
+    ['금리', ['domestic_rates', 'global_rates', 'credit']],
+    ['국채', ['domestic_rates', 'global_rates']],
+    ['크레딧', ['credit']],
+    ['주식', ['domestic_equities_fx', 'global_equities']],
+    ['코스피', ['domestic_equities_fx']],
+    ['나스닥', ['global_equities']],
+    ['환율', ['fx']],
+    ['달러', ['fx']],
+    ['원달러', ['fx']],
+    ['암호', ['crypto']],
+    ['비트', ['crypto']],
+    ['상품', ['commodities']],
+    ['유가', ['commodities']],
+    ['금값', ['commodities']],
+  ];
+
+  for (const [keyword, categories] of categoryHints) {
+    if (question.includes(keyword) && categories.includes(item.category)) score += 2;
+  }
+
+  return score;
+}
+
+function observationToAnswerLine(item) {
+  return `${item.metric_name}: ${formatNumber(item.value)}${item.unit || ''}, 1D ${formatChangeText(item.change_1d, item.change_1d_unit)}, YTD ${formatChangeText(item.change_ytd, item.change_ytd_unit)}`;
+}
+
+async function answerMarketQuestion(payload = {}) {
+  const question = String(payload.question || '').trim();
+  let date = payload.report_date || payload.date || '';
+
+  if (!date) {
+    date = await getLatestReportDate();
+  }
+
+  if (!date || !isDate(date)) {
+    const error = new Error('질문할 리포트 날짜를 찾지 못했습니다.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const report = await readReport(date);
+  const observations = report.observations || [];
+  const scored = observations
+    .map((item) => ({ item, score: scoreObservation(item, question) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map((row) => row.item);
+
+  const matches = scored.length > 0 ? scored : observations.slice(0, 8);
+  const commentText = report.comment?.final_comment || report.comment?.auto_comment || '';
+  const intro = question
+    ? `${date} 리포트에서 "${question}"와 관련된 지표를 찾았습니다.`
+    : `${date} 리포트의 주요 지표입니다.`;
+  const lines = matches.map(observationToAnswerLine);
+  const commentLine = commentText
+    ? `저장된 코멘트 요약: ${commentText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0]}`
+    : '저장된 최종 코멘트는 아직 없습니다.';
+
+  return {
+    report_date: date,
+    question,
+    answer: [intro, ...lines, commentLine].join('\n'),
+    matches,
+    source: 'local_report_json',
+    mode: 'rule_based_search',
   };
 }
 
@@ -169,9 +1000,10 @@ function buildCommentSql(date, payload) {
 
 async function readBody(req) {
   const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
     chunks.push(chunk);
-    const size = chunks.reduce((sum, part) => sum + part.length, 0);
+    size += chunk.length;
     if (size > 1_000_000) {
       const error = new Error('Request body is too large');
       error.statusCode = 413;
@@ -207,15 +1039,105 @@ async function saveComment(date, payload) {
   const sql = buildCommentSql(date, normalized);
   const commentPath = path.join(processedDir, `comment_${date}.json`);
   const sqlPath = path.join(outputDir, `market_daily_${date}.comment_update.sql`);
+  const reviewHtmlPath = path.join(outputDir, `market_daily_${date}.review.html`);
+  const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
+  const report = parseJson(reportRaw);
+  const reviewHtml = buildReviewHtml(report, normalized);
 
   await writeFile(commentPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   await writeFile(sqlPath, sql, 'utf8');
+  await writeFile(reviewHtmlPath, reviewHtml, 'utf8');
 
   return {
     comment: normalized,
     sql,
     sql_file: path.relative(projectRoot, sqlPath),
     comment_file: path.relative(projectRoot, commentPath),
+    review_html: path.relative(projectRoot, reviewHtmlPath),
+  };
+}
+
+async function generateCommentDraft(date, payload = {}) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
+  const report = parseJson(reportRaw);
+  return {
+    report_date: date,
+    auto_comment: buildAutoCommentDraft(report, payload.reference_note || ''),
+    generated_at: new Date().toISOString(),
+  };
+}
+
+async function uploadReportToSupabase(date, payload) {
+  const saved = await saveComment(date, payload);
+  const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
+  const report = parseJson(reportRaw);
+  const comment = saved.comment;
+
+  const reportRows = await supabaseRest('POST', 'reports?on_conflict=report_date', [{
+    report_date: report.report_date,
+    status: comment.status,
+    title: report.title || `Daily Report ${report.report_date}`,
+    published_at: comment.status === 'published' ? new Date().toISOString() : null,
+  }]);
+
+  const reportId = Array.isArray(reportRows) ? reportRows[0]?.id : reportRows?.id;
+  if (!reportId) {
+    const error = new Error('Could not resolve report id after uploading report.');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const observations = (report.observations || []).map((item) => ({
+    report_id: reportId,
+    observed_date: item.observed_date,
+    category: item.category,
+    metric_key: item.metric_key,
+    metric_name: item.metric_name,
+    value: item.value,
+    unit: item.unit,
+    change_1d: item.change_1d,
+    change_1d_unit: item.change_1d_unit,
+    change_ytd: item.change_ytd,
+    change_ytd_unit: item.change_ytd_unit,
+    source: item.source,
+    source_sheet: item.source_sheet,
+    source_cell: item.source_cell,
+    raw_value: item.raw_value,
+  }));
+
+  if (observations.length > 0) {
+    await supabaseRest('POST', 'market_observations?on_conflict=report_id,metric_key', observations);
+  }
+
+  const approvedAt = ['reviewed', 'published'].includes(comment.status)
+    ? new Date().toISOString()
+    : null;
+
+  await supabaseRest('POST', 'report_comments?on_conflict=report_id', [{
+    report_id: reportId,
+    auto_comment: comment.auto_comment || null,
+    final_comment: comment.final_comment || null,
+    reference_note: comment.reference_note || null,
+    tags: comment.tags || [],
+    approved_by: comment.approved_by || null,
+    approved_at: approvedAt,
+  }]);
+
+  return {
+    ...saved,
+    supabase: {
+      uploaded: true,
+      report_id: reportId,
+      report_date: report.report_date,
+      observation_count: observations.length,
+      status: comment.status,
+    },
   };
 }
 
@@ -224,6 +1146,8 @@ async function serveStatic(res, requestPath) {
 
   if (requestPath === '/' || requestPath === '/admin') {
     filePath = path.join(__dirname, 'index.html');
+  } else if (requestPath === '/reports' || requestPath === '/archive') {
+    filePath = path.join(__dirname, 'archive.html');
   } else if (requestPath.startsWith('/admin/')) {
     filePath = path.join(__dirname, requestPath.replace('/admin/', ''));
   } else if (requestPath.startsWith('/output/')) {
@@ -272,9 +1196,28 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && requestPath === '/api/ask') {
+      const body = await readBody(req);
+      sendJson(res, 200, await answerMarketQuestion(body));
+      return;
+    }
+
+    const metricSeriesMatch = requestPath.match(/^\/api\/metrics\/([^/]+)\/series$/);
+    if (req.method === 'GET' && metricSeriesMatch) {
+      sendJson(res, 200, await getMetricSeries(decodeURIComponent(metricSeriesMatch[1])));
+      return;
+    }
+
     const reportMatch = requestPath.match(/^\/api\/reports\/(\d{4}-\d{2}-\d{2})$/);
     if (req.method === 'GET' && reportMatch) {
       sendJson(res, 200, await readReport(reportMatch[1]));
+      return;
+    }
+
+    const draftMatch = requestPath.match(/^\/api\/comments\/(\d{4}-\d{2}-\d{2})\/draft$/);
+    if (req.method === 'POST' && draftMatch) {
+      const body = await readBody(req);
+      sendJson(res, 200, await generateCommentDraft(draftMatch[1], body));
       return;
     }
 
@@ -282,6 +1225,13 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && commentMatch) {
       const body = await readBody(req);
       sendJson(res, 200, await saveComment(commentMatch[1], body));
+      return;
+    }
+
+    const supabaseUploadMatch = requestPath.match(/^\/api\/supabase\/reports\/(\d{4}-\d{2}-\d{2})$/);
+    if (req.method === 'POST' && supabaseUploadMatch) {
+      const body = await readBody(req);
+      sendJson(res, 200, await uploadReportToSupabase(supabaseUploadMatch[1], body));
       return;
     }
 

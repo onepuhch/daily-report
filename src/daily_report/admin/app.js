@@ -20,12 +20,21 @@ const els = {
   autoCommentInput: document.querySelector('#autoCommentInput'),
   referenceInput: document.querySelector('#referenceInput'),
   finalCommentInput: document.querySelector('#finalCommentInput'),
-  tagsInput: document.querySelector('#tagsInput'),
-  approvedByInput: document.querySelector('#approvedByInput'),
+  draftButton: document.querySelector('#draftButton'),
   saveButton: document.querySelector('#saveButton'),
+  uploadButton: document.querySelector('#uploadButton'),
   saveMessage: document.querySelector('#saveMessage'),
   sqlOutput: document.querySelector('#sqlOutput'),
 };
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 
 function formatNumber(value) {
   if (value === null || value === undefined || value === '') return '-';
@@ -67,15 +76,6 @@ function formatChange(value, unit) {
   return `<span class="change ${className}">${sign}${formatNumber(number)}${escapeHtml(unit || '')}</span>`;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
   const data = await response.json();
@@ -87,7 +87,7 @@ async function fetchJson(url, options) {
 
 function renderReportList() {
   if (state.reports.length === 0) {
-    els.reportList.innerHTML = '<div class="empty-state">리포트 없음</div>';
+    els.reportList.innerHTML = '<div class="empty-state">리포트가 없습니다.</div>';
     return;
   }
 
@@ -138,7 +138,7 @@ function renderMetrics() {
     .filter((item) => state.currentCategory === 'all' || item.category === state.currentCategory);
 
   if (rows.length === 0) {
-    els.metricRows.innerHTML = '<tr><td colspan="5" class="empty-state">표시할 데이터 없음</td></tr>';
+    els.metricRows.innerHTML = '<tr><td colspan="5" class="empty-state">표시할 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -162,8 +162,6 @@ function setCommentForm(comment) {
   els.autoCommentInput.value = comment?.auto_comment || '';
   els.referenceInput.value = comment?.reference_note || '';
   els.finalCommentInput.value = comment?.final_comment || '';
-  els.tagsInput.value = Array.isArray(comment?.tags) ? comment.tags.join(', ') : '';
-  els.approvedByInput.value = comment?.approved_by || '자금운용본부';
   els.statusInput.value = comment?.status || 'draft';
   els.sqlOutput.value = '';
   els.saveMessage.textContent = '';
@@ -196,7 +194,7 @@ async function loadReports() {
   if (state.currentDate) {
     await loadReport(state.currentDate);
   } else {
-    els.reportTitle.textContent = '리포트 없음';
+    els.reportTitle.textContent = '리포트가 없습니다.';
   }
 }
 
@@ -212,8 +210,8 @@ function getCommentPayload() {
     auto_comment: els.autoCommentInput.value.trim(),
     reference_note: els.referenceInput.value.trim(),
     final_comment: els.finalCommentInput.value.trim(),
-    tags: els.tagsInput.value.split(',').map((item) => item.trim()).filter(Boolean),
-    approved_by: els.approvedByInput.value.trim(),
+    tags: [],
+    approved_by: '',
     status: els.statusInput.value,
   };
 }
@@ -222,7 +220,7 @@ async function saveComment() {
   if (!state.currentDate) return;
 
   els.saveButton.disabled = true;
-  els.saveMessage.textContent = '저장 중';
+  els.saveMessage.textContent = '저장 중입니다...';
   els.saveMessage.className = 'save-message';
 
   try {
@@ -233,9 +231,11 @@ async function saveComment() {
     });
 
     state.currentReport.comment = result.comment;
+    state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
     els.summaryStatus.textContent = result.comment.status;
+    els.previewLink.href = `/${state.currentReport.preview_html}`;
     els.sqlOutput.value = result.sql;
-    els.saveMessage.textContent = `${result.comment_file} 저장, ${result.sql_file} 생성`;
+    els.saveMessage.textContent = `${result.comment_file} 저장, ${result.sql_file} 생성, ${result.review_html} 생성`;
     els.saveMessage.className = 'save-message ok';
   } catch (error) {
     els.saveMessage.textContent = error.message;
@@ -245,8 +245,68 @@ async function saveComment() {
   }
 }
 
+async function generateDraft() {
+  if (!state.currentDate) return;
+
+  els.draftButton.disabled = true;
+  els.saveMessage.textContent = '자동 초안을 생성하는 중입니다...';
+  els.saveMessage.className = 'save-message';
+
+  try {
+    const result = await fetchJson(`/api/comments/${state.currentDate}/draft`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reference_note: els.referenceInput.value.trim(),
+      }),
+    });
+
+    els.autoCommentInput.value = result.auto_comment || '';
+    els.saveMessage.textContent = '자동 코멘트 초안을 생성했습니다. 최종 코멘트에는 직접 옮겨 다듬어 주세요.';
+    els.saveMessage.className = 'save-message ok';
+  } catch (error) {
+    els.saveMessage.textContent = `자동 초안 생성 실패: ${error.message}`;
+    els.saveMessage.className = 'save-message error';
+  } finally {
+    els.draftButton.disabled = false;
+  }
+}
+
+async function uploadToSupabase() {
+  if (!state.currentDate) return;
+
+  els.uploadButton.disabled = true;
+  els.saveButton.disabled = true;
+  els.saveMessage.textContent = 'Supabase에 저장 중입니다...';
+  els.saveMessage.className = 'save-message';
+
+  try {
+    const result = await fetchJson(`/api/supabase/reports/${state.currentDate}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(getCommentPayload()),
+    });
+
+    state.currentReport.comment = result.comment;
+    state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
+    els.summaryStatus.textContent = result.comment.status;
+    els.previewLink.href = `/${state.currentReport.preview_html}`;
+    els.sqlOutput.value = result.sql;
+    els.saveMessage.textContent = `Supabase 저장 완료: ${result.supabase.report_date}, ${result.supabase.observation_count}개 지표`;
+    els.saveMessage.className = 'save-message ok';
+  } catch (error) {
+    els.saveMessage.textContent = `Supabase 저장 실패: ${error.message}`;
+    els.saveMessage.className = 'save-message error';
+  } finally {
+    els.uploadButton.disabled = false;
+    els.saveButton.disabled = false;
+  }
+}
+
 els.refreshButton.addEventListener('click', () => loadReports());
+els.draftButton.addEventListener('click', generateDraft);
 els.saveButton.addEventListener('click', saveComment);
+els.uploadButton.addEventListener('click', uploadToSupabase);
 
 loadReports().catch((error) => {
   els.reportTitle.textContent = '관리자 화면 오류';
