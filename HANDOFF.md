@@ -1,5 +1,16 @@
 # 인수인계서 (이 파일 하나만 보면 됩니다)
 
+## 2026-05-18 Codex update
+
+- Pulled `origin/master` to `512348f`.
+- Reapplied the local stash and resolved `src/daily_report/admin/server.mjs` in favor of the upstream API/data flow.
+- Phase B public report page work is implemented in `buildReviewHtml()`:
+  - 48px sticky report header with five market ticker chips.
+  - Compact commentary card capped at 120px.
+  - Three-column metric grid with domestic, overseas, and FX/commodity/crypto columns.
+  - Existing API/data helpers are preserved.
+- Next recommended entry point: Phase E inline SVG sparklines for rows with `data-metric-key`.
+
 > 다른 PC·다른 AI 도구(Codex/Claude/Gemini 등)로 작업을 이어받을 때 이 파일만 읽으면 즉시 진입 가능.
 > 작업 끝나면 **반드시 이 파일을 갱신**하고 commit + push.
 

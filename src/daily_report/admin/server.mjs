@@ -364,44 +364,101 @@ function buildReviewHtml(report, comment) {
   const reportDate = report.report_date;
   const status = comment.status || 'draft';
   const mainComment = comment.final_comment || comment.auto_comment || '';
-  const highlights = buildHighlightCards(report);
-  const topMovers = buildTopMoverList(report);
+  const byKey = new Map((report.observations || []).map((item) => [item.metric_key, item]));
   const workbookName = report.source_workbook ? path.basename(report.source_workbook) : '-';
-  const sections = groupObservations(report.observations).map((group) => {
-    const rows = group.rows.map((item) => `
-      <tr>
-        <td>
-          <strong>${escapeHtml(item.metric_name)}</strong>
-          <small>${escapeHtml(item.metric_key)}</small>
-        </td>
-        <td>${formatNumber(item.value)} <span class="muted">${escapeHtml(item.unit || '')}</span></td>
-        <td>${formatChange(item.change_1d, item.change_1d_unit)}</td>
-        <td>${formatChange(item.change_ytd, item.change_ytd_unit)}</td>
-        <td><span class="source">${escapeHtml(item.source_sheet || '-')}${item.source_cell ? `!${escapeHtml(item.source_cell)}` : ''}</span></td>
-      </tr>`).join('\n');
+  const pick = (keys) => keys.map((key) => byKey.get(key)).filter(Boolean);
+  const tickerItems = [
+    ['kospi', 'KOSPI'],
+    ['usdkrw', 'USD/KRW'],
+    ['us_10y', 'US10Y'],
+    ['wti', 'WTI'],
+    ['gold', 'GOLD'],
+  ].map(([key, label]) => ({ item: byKey.get(key), label })).filter(({ item }) => item);
 
+  const columns = [
+    {
+      label: '국내',
+      groups: [
+        { title: '국내금리', rows: pick(['kr_cd91', 'kr_1y', 'kr_3y', 'kr_5y', 'kr_10y', 'kr_30y']) },
+        { title: '국내주식', rows: pick(['kospi', 'kosdaq', 'kospi200']) },
+        { title: '크레딧', rows: pick(['kr_aa3y', 'kr_bbb3y']) },
+      ],
+    },
+    {
+      label: '해외 금리·주식',
+      groups: [
+        { title: '해외금리', rows: pick(['us_2y', 'us_5y', 'us_10y', 'us_30y', 'de_10y']) },
+        { title: '해외주식', rows: pick(['sp500', 'nasdaq', 'nikkei', 'shanghai']) },
+      ],
+    },
+    {
+      label: '외환·원자재·암호화폐',
+      groups: [
+        { title: '외환', rows: pick(['usdkrw', 'dxy']) },
+        { title: '원자재', rows: pick(['wti', 'brent', 'gold', 'silver', 'copper']) },
+        { title: '암호화폐', rows: pick(['bitcoin', 'btc_usd']) },
+      ],
+    },
+  ];
+
+  const seenKeys = new Set(columns.flatMap((column) => column.groups.flatMap((group) => group.rows.map((item) => item.metric_key))));
+  const leftoverFlows = (report.observations || []).filter((item) => item.category === 'investor_flows' && !seenKeys.has(item.metric_key));
+  if (leftoverFlows.length > 0) {
+    columns[0].groups.push({ title: '투자자 동향', rows: leftoverFlows });
+    for (const item of leftoverFlows) seenKeys.add(item.metric_key);
+  }
+  const leftover = (report.observations || []).filter((item) => !seenKeys.has(item.metric_key));
+  if (leftover.length > 0) {
+    columns[2].groups.push({ title: '기타', rows: leftover });
+  }
+
+  const renderTicker = ({ item, label }) => `
+    <article class="ticker-chip ${Number(item.change_1d) > 0 ? 'is-up' : Number(item.change_1d) < 0 ? 'is-down' : 'is-flat'}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${formatNumber(item.value)}${item.unit ? `<small>${escapeHtml(item.unit)}</small>` : ''}</strong>
+      <em>1D ${formatChangeText(item.change_1d, item.change_1d_unit)}</em>
+    </article>`;
+
+  const renderMetricRow = (item) => `
+    <tr data-metric-key="${escapeHtml(item.metric_key)}">
+      <th scope="row">
+        <span class="metric-title">${escapeHtml(item.metric_name)}</span>
+        <span class="metric-key">${escapeHtml(item.metric_key)}</span>
+      </th>
+      <td class="num">${formatNumber(item.value)}${item.unit ? `<span>${escapeHtml(item.unit)}</span>` : ''}</td>
+      <td class="change-cell">${formatChange(item.change_1d, item.change_1d_unit)}</td>
+      <td class="change-cell">${formatChange(item.change_ytd, item.change_ytd_unit)}</td>
+      <td class="spark-cell" aria-label="sparkline placeholder">--</td>
+    </tr>`;
+
+  const renderGroup = (group) => {
+    if (group.rows.length === 0) return '';
     return `
-      <section class="section">
-        <div class="section-head">
-          <h2>${escapeHtml(group.label)}</h2>
-          <span>${group.rows.length}개 지표</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>지표</th>
-                <th>값</th>
-                <th>전일대비</th>
-                <th>YTD</th>
-                <th>출처</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
+      <section class="metric-card">
+        <header class="metric-card-head">
+          <h2>${escapeHtml(group.title)}</h2>
+          <span>${group.rows.length}</span>
+        </header>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">지표명</th>
+              <th scope="col">값</th>
+              <th scope="col">1D</th>
+              <th scope="col">YTD</th>
+              <th scope="col">추이</th>
+            </tr>
+          </thead>
+          <tbody>${group.rows.map(renderMetricRow).join('\n')}</tbody>
+        </table>
       </section>`;
-  }).join('\n');
+  };
+
+  const metricColumns = columns.map((column) => `
+    <section class="metric-column" aria-label="${escapeHtml(column.label)}">
+      <div class="column-title">${escapeHtml(column.label)}</div>
+      ${column.groups.map(renderGroup).join('\n')}
+    </section>`).join('\n');
 
   return `<!doctype html>
 <html lang="ko">
@@ -719,14 +776,266 @@ function buildReviewHtml(report, comment) {
       .highlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .summary-layout { grid-template-columns: 1fr; }
     }
+    .report-header {
+      align-items: center;
+      backdrop-filter: blur(12px);
+      background: rgba(250, 251, 252, 0.94);
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      height: 48px;
+      margin: 0 0 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    main {
+      padding: 16px 0 28px;
+      width: min(1440px, calc(100% - 32px));
+    }
+    .header-main { min-width: 0; }
+    .report-header .kicker {
+      font-size: 11px;
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+    .report-header h1 {
+      color: var(--text-strong);
+      font-size: 18px;
+      line-height: 1.1;
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ticker-strip {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .ticker-strip::-webkit-scrollbar { display: none; }
+    .ticker-chip {
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      display: grid;
+      gap: 1px;
+      grid-template-columns: auto auto;
+      min-width: 118px;
+      padding: 5px 8px;
+    }
+    .ticker-chip span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .ticker-chip strong {
+      color: var(--text-strong);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      justify-self: end;
+      line-height: 1;
+    }
+    .ticker-chip small {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 600;
+      margin-left: 2px;
+    }
+    .ticker-chip em {
+      font-size: 10px;
+      font-style: normal;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      grid-column: 1 / -1;
+      justify-self: end;
+    }
+    .ticker-chip.is-up em { color: var(--up); }
+    .ticker-chip.is-down em { color: var(--down); }
+    .ticker-chip.is-flat em { color: var(--flat); }
+    .report-meta {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .report-header .meta,
+    .header-date,
+    .report-nav,
+    #key-metrics,
+    .mover-panel {
+      display: none;
+    }
+    .summary-layout {
+      display: block;
+      margin-bottom: 14px;
+    }
+    .comment {
+      margin-bottom: 14px;
+      max-height: 120px;
+      overflow: hidden;
+      padding: 14px 16px;
+      position: relative;
+    }
+    .comment.is-expanded { max-height: none; }
+    .comment-head {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .comment h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+    .comment p {
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .comment-toggle {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .metric-grid,
+    #details {
+      align-items: start;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .metric-column {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+    .column-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+    .metric-card-head {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+      min-height: 32px;
+      padding: 7px 10px;
+    }
+    .metric-card-head h2 {
+      font-size: 13px;
+      font-weight: 750;
+      margin: 0;
+    }
+    .metric-card-head span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .metric-card table {
+      border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
+    }
+    .metric-card th,
+    .metric-card td {
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      height: 28px;
+      line-height: 1.15;
+      padding: 4px 8px;
+      text-align: right;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .metric-card thead th {
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+    }
+    .metric-card th:first-child,
+    .metric-card td:first-child {
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+    }
+    .metric-card tbody th {
+      background: transparent;
+      color: var(--text);
+      font-weight: 650;
+      width: 34%;
+    }
+    .metric-title {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .metric-key {
+      color: var(--muted);
+      display: block;
+      font-size: 9px;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+    .num,
+    .change-cell {
+      font-variant-numeric: tabular-nums;
+    }
+    .num { font-weight: 700; }
+    .num span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 2px;
+    }
+    .spark-cell {
+      color: var(--subtle);
+      font-size: 11px;
+      width: 52px;
+    }
+    @media (max-width: 1100px) {
+      .report-header {
+        align-items: start;
+        grid-template-columns: 1fr;
+        height: auto;
+        padding-bottom: 8px;
+      }
+      .ticker-strip { justify-content: flex-start; }
+      .metric-grid,
+      #details { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      main { padding-top: 10px; width: min(100% - 20px, 1440px); }
+      .report-meta { flex-wrap: wrap; }
+      .ticker-chip { min-width: 104px; }
+      .metric-card th,
+      .metric-card td { font-size: 12px; padding-left: 6px; padding-right: 6px; }
+      .metric-key { display: none; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <header>
+    <header class="report-header">
       <div>
-        <div class="kicker">Market Daily</div>
-        <h1>Daily Report</h1>
+        <div class="kicker">${escapeHtml(formatDateKo(reportDate))}</div>
+        <h1>${escapeHtml(report.title || 'Market Daily')}</h1>
         <div class="meta">
           <span class="pill">기준일 ${escapeHtml(reportDate)}</span>
           <span class="pill">작성 ${escapeHtml(report.author || '자금운용본부')}</span>
@@ -737,35 +1046,35 @@ function buildReviewHtml(report, comment) {
         <strong>${escapeHtml(formatDateKo(reportDate))}</strong>
         <span>${escapeHtml(formatDateTimeKo(report.generated_at))} 생성</span>
       </div>
+      <div class="ticker-strip" aria-label="key metrics">
+        ${tickerItems.map(renderTicker).join('\n')}
+      </div>
     </header>
 
-    <nav class="report-nav" aria-label="리포트 섹션">
-      <a href="#commentary">시장 코멘트</a>
-      <a href="#key-metrics">핵심 지표</a>
-      <a href="#details">상세 데이터</a>
-    </nav>
-
-    <div class="summary-layout">
-      <section id="commentary" class="comment">
-        <h2>시장 코멘트</h2>
-        ${textToParagraphs(mainComment)}
-      </section>
-      <aside class="mover-panel">
-        <h2>전일대비 주요 변동</h2>
-        ${topMovers}
-      </aside>
-    </div>
-
-    <div id="key-metrics">
-      ${highlights}
-    </div>
+    <section id="commentary" class="comment">
+      <h2>시장 코멘트</h2>
+      <button class="comment-toggle" type="button" aria-expanded="false">More</button>
+      <div class="comment-body">${textToParagraphs(mainComment)}</div>
+    </section>
 
     <div id="details">
-      ${sections}
+      ${metricColumns}
     </div>
 
     <footer>Generated at ${escapeHtml(formatDateTimeKo())} · source workbook: ${escapeHtml(workbookName)}</footer>
   </main>
+  <script>
+    const comment = document.querySelector('.comment');
+    const toggle = document.querySelector('.comment-toggle');
+    if (comment && toggle) {
+      toggle.addEventListener('click', () => {
+        const expanded = comment.classList.toggle('is-expanded');
+        toggle.textContent = expanded ? 'Less' : 'More';
+        toggle.setAttribute('aria-expanded', String(expanded));
+      });
+      if (comment.scrollHeight <= 122) toggle.hidden = true;
+    }
+  </script>
 </body>
 </html>
 `;
