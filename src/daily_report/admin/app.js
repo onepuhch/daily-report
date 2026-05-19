@@ -3,15 +3,17 @@ const state = {
   currentDate: null,
   currentReport: null,
   currentCategory: 'all',
+  currentView: 'data',
+  validationResult: null,
+  jobRuns: [],
 };
 
 const els = {
-  reportList: document.querySelector('#reportList'),
+  reportSelect: document.querySelector('#reportSelect'),
+  dailyReportMenuButton: document.querySelector('#dailyReportMenuButton'),
+  jobRunsMenuButton: document.querySelector('#jobRunsMenuButton'),
   reportTitle: document.querySelector('#reportTitle'),
-  previewLink: document.querySelector('#previewLink'),
   refreshButton: document.querySelector('#refreshButton'),
-  summaryDate: document.querySelector('#summaryDate'),
-  summaryCount: document.querySelector('#summaryCount'),
   summaryGenerated: document.querySelector('#summaryGenerated'),
   summaryStatus: document.querySelector('#summaryStatus'),
   categoryTabs: document.querySelector('#categoryTabs'),
@@ -23,6 +25,21 @@ const els = {
   draftButton: document.querySelector('#draftButton'),
   uploadButton: document.querySelector('#uploadButton'),
   saveMessage: document.querySelector('#saveMessage'),
+  dataView: document.querySelector('#dataView'),
+  previewView: document.querySelector('#previewView'),
+  previewFrame: document.querySelector('#previewFrame'),
+  previewOpenLink: document.querySelector('#previewOpenLink'),
+  commentView: document.querySelector('#commentView'),
+  validationView: document.querySelector('#validationView'),
+  jobsView: document.querySelector('#jobsView'),
+  viewTabs: document.querySelectorAll('.workspace-tab'),
+  runValidationButton: document.querySelector('#runValidationButton'),
+  validationSummary: document.querySelector('#validationSummary'),
+  validationRows: document.querySelector('#validationRows'),
+  validationMessages: document.querySelector('#validationMessages'),
+  reloadJobsButton: document.querySelector('#reloadJobsButton'),
+  jobsSummary: document.querySelector('#jobsSummary'),
+  jobRows: document.querySelector('#jobRows'),
 };
 
 function escapeHtml(value) {
@@ -83,22 +100,19 @@ async function fetchJson(url, options) {
   return data;
 }
 
-function renderReportList() {
+function renderReportPicker() {
   if (state.reports.length === 0) {
-    els.reportList.innerHTML = '<div class="empty-state">리포트가 없습니다.</div>';
+    els.reportSelect.innerHTML = '<option value="">리포트 없음</option>';
+    els.reportSelect.disabled = true;
     return;
   }
 
-  els.reportList.innerHTML = state.reports.map((report) => `
-    <button class="report-item ${report.date === state.currentDate ? 'active' : ''}" type="button" data-date="${escapeHtml(report.date)}">
-      <strong>${escapeHtml(report.date)}</strong>
-      <span>${escapeHtml(report.observation_count)}개 지표</span>
-    </button>
+  els.reportSelect.disabled = false;
+  els.reportSelect.innerHTML = state.reports.map((report) => `
+    <option value="${escapeHtml(report.date)}" ${report.date === state.currentDate ? 'selected' : ''}>
+      ${escapeHtml(report.date)}
+    </option>
   `).join('');
-
-  els.reportList.querySelectorAll('[data-date]').forEach((button) => {
-    button.addEventListener('click', () => loadReport(button.dataset.date));
-  });
 }
 
 function categoriesFor(report) {
@@ -136,7 +150,7 @@ function renderMetrics() {
     .filter((item) => state.currentCategory === 'all' || item.category === state.currentCategory);
 
   if (rows.length === 0) {
-    els.metricRows.innerHTML = '<tr><td colspan="5" class="empty-state">표시할 데이터가 없습니다.</td></tr>';
+    els.metricRows.innerHTML = '<tr><td colspan="4" class="empty-state">표시할 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -151,7 +165,6 @@ function renderMetrics() {
       <td class="value-cell">${formatNumber(item.value)} ${escapeHtml(item.unit || '')}</td>
       <td>${formatChange(item.change_1d, item.change_1d_unit)}</td>
       <td>${formatChange(item.change_ytd, item.change_ytd_unit)}</td>
-      <td class="source-cell">${escapeHtml(item.source_sheet || '-')}${item.source_cell ? ` ${escapeHtml(item.source_cell)}` : ''}</td>
     </tr>
   `).join('');
 }
@@ -170,23 +183,234 @@ function renderReport() {
   if (!report) return;
 
   els.reportTitle.textContent = report.title || `Daily Report ${report.report_date}`;
-  els.summaryDate.textContent = report.report_date || '-';
-  els.summaryCount.textContent = String((report.observations || []).length);
   els.summaryGenerated.textContent = formatDateTime(report.generated_at);
   els.summaryStatus.textContent = report.comment?.status || 'draft';
-  els.previewLink.href = `/${report.preview_html}`;
+  const previewUrl = `/${report.preview_html}`;
+  els.previewFrame.src = previewUrl;
+  els.previewOpenLink.href = previewUrl;
 
   setCommentForm(report.comment);
-  renderReportList();
+  renderReportPicker();
   renderCategoryTabs();
   renderMetrics();
+  clearValidation();
+}
+
+function setView(view) {
+  state.currentView = view;
+  const isData = view === 'data';
+  const isPreview = view === 'preview';
+  const isComment = view === 'comment';
+  const isValidation = view === 'validation';
+  const isJobs = view === 'jobs';
+  els.dataView.hidden = !isData;
+  els.previewView.hidden = !isPreview;
+  els.commentView.hidden = !isComment;
+  els.validationView.hidden = !isValidation;
+  els.jobsView.hidden = !isJobs;
+  els.dataView.classList.toggle('active', isData);
+  els.previewView.classList.toggle('active', isPreview);
+  els.commentView.classList.toggle('active', isComment);
+  els.validationView.classList.toggle('active', isValidation);
+  els.jobsView.classList.toggle('active', isJobs);
+  els.viewTabs.forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+  els.dailyReportMenuButton.classList.toggle('active', !isJobs);
+  els.jobRunsMenuButton.classList.toggle('active', isJobs);
+
+  if (isJobs) {
+    loadJobRuns();
+  }
+}
+
+function clearValidation() {
+  state.validationResult = null;
+  els.validationSummary.className = 'validation-summary empty-state';
+  els.validationSummary.textContent = '검증 실행 버튼을 누르면 현재 선택한 날짜의 Supabase 반영 여부와 Yahoo Finance 대조 결과가 표시됩니다.';
+  els.validationRows.innerHTML = '';
+  els.validationMessages.innerHTML = '';
+}
+
+function renderValidationMessages(result) {
+  const blocks = [];
+  if (result.errors?.length) {
+    blocks.push(`
+      <div class="validation-message error">
+        <strong>Errors</strong>
+        <ul>${result.errors.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      </div>
+    `);
+  }
+  if (result.warnings?.length) {
+    blocks.push(`
+      <div class="validation-message warn">
+        <strong>Warnings</strong>
+        <ul>${result.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      </div>
+    `);
+  }
+  if (result.approvals?.length) {
+    blocks.push(`
+      <div class="validation-message approval">
+        <strong>승인 이력</strong>
+        <ul>${result.approvals.map((item) => `
+          <li>${escapeHtml(item.metric_name || item.metric_key)} · ${escapeHtml(formatDateTime(item.approved_at))} · ${escapeHtml(item.reason || '승인')}</li>
+        `).join('')}</ul>
+      </div>
+    `);
+  }
+  els.validationMessages.innerHTML = blocks.join('');
+}
+
+function renderValidation(result) {
+  const checks = result.cross_checks || [];
+  const failed = checks.filter((item) => !item.passed && !item.approved).length;
+  const approved = checks.filter((item) => item.approved).length;
+  const warnings = result.warnings?.length || 0;
+  const errors = result.errors?.length || 0;
+  const summaryClass = errors > 0 ? 'error' : result.status === 'pass' && failed === 0 ? 'ok' : 'warn';
+  const summaryText = errors > 0 ? '실패' : failed > 0 ? '차이 확인 필요' : '통과';
+
+  els.validationSummary.className = `validation-summary ${summaryClass}`;
+  els.validationSummary.innerHTML = `
+    <strong>${escapeHtml(result.report_date)} 검증 ${summaryText}</strong>
+    <span>Yahoo Finance 대조 완료 · 차이 ${failed}개 · 승인 ${approved}개 · 경고 ${warnings}개 · 오류 ${errors}개</span>
+  `;
+
+  if (!checks.length) {
+    els.validationRows.innerHTML = '<tr><td colspan="7" class="empty-state">표시할 외부 검증 결과가 없습니다.</td></tr>';
+  } else {
+    els.validationRows.innerHTML = checks.map((item) => `
+      <tr class="${item.passed || item.approved ? '' : 'validation-failed'}">
+        <td>${escapeHtml(item.name || item.metric_key)}</td>
+        <td>${escapeHtml(item.symbol || '-')}</td>
+        <td class="value-cell">${formatNumber(item.local)}</td>
+        <td class="value-cell">${formatNumber(item.external)}</td>
+        <td>${renderValidationStatus(item)}</td>
+        <td>${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">Yahoo</a>` : '-'}</td>
+        <td>${renderApprovalAction(item)}</td>
+      </tr>
+    `).join('');
+
+    els.validationRows.querySelectorAll('[data-approve-metric]').forEach((button) => {
+      button.addEventListener('click', () => approveValidation(button.dataset.approveMetric));
+    });
+  }
+
+  renderValidationMessages(result);
+}
+
+function renderValidationStatus(item) {
+  if (item.approved) {
+    return '<span class="status-pill approved">승인됨</span>';
+  }
+  return `<span class="status-pill ${item.passed ? 'pass' : 'warn'}">${item.passed ? '일치' : '차이 있음'}</span>`;
+}
+
+function renderApprovalAction(item) {
+  if (item.passed) return '-';
+  if (item.approved) {
+    return `<span class="approval-note">${escapeHtml(formatDateTime(item.approval?.approved_at))}</span>`;
+  }
+  return `<button class="button micro" type="button" data-approve-metric="${escapeHtml(item.metric_key)}">우리 값 승인</button>`;
+}
+
+async function approveValidation(metricKey) {
+  if (!state.currentDate || !state.validationResult) return;
+  const item = (state.validationResult.cross_checks || []).find((check) => check.metric_key === metricKey);
+  if (!item) return;
+
+  const reason = window.prompt(
+    `${item.name || item.metric_key} 차이를 승인할까요?`,
+    'Yahoo와 차이가 있지만 Infomax/DB 값을 운영 기준으로 승인합니다.',
+  );
+  if (reason === null) return;
+
+  try {
+    await fetchJson(`/api/validation/${state.currentDate}/approvals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        metric_key: item.metric_key,
+        metric_name: item.name || item.metric_key,
+        source: item.source || 'Yahoo Finance',
+        symbol: item.symbol || null,
+        db_value: item.local,
+        external_value: item.external,
+        reason: reason.trim(),
+      }),
+    });
+    await runValidation();
+  } catch (error) {
+    els.validationSummary.className = 'validation-summary error';
+    els.validationSummary.textContent = `승인 저장 실패: ${error.message}`;
+  }
+}
+
+function formatJobPeriod(job) {
+  if (!job.report_from && !job.report_until) return '-';
+  if (job.report_from === job.report_until) return job.report_from;
+  return `${job.report_from || '-'} ~ ${job.report_until || '-'}`;
+}
+
+function formatUploadCounts(job) {
+  const reports = job.uploaded_reports ?? '-';
+  const observations = job.uploaded_observations ?? '-';
+  return `리포트 ${reports} / 지표 ${observations}`;
+}
+
+function renderJobRuns(data) {
+  const rows = data.job_runs || [];
+  state.jobRuns = rows;
+  const latest = rows[0];
+
+  if (!rows.length) {
+    els.jobsSummary.className = 'jobs-summary empty-state';
+    els.jobsSummary.textContent = '표시할 자동화 실행 내역이 없습니다.';
+    els.jobRows.innerHTML = '';
+    return;
+  }
+
+  els.jobsSummary.className = `jobs-summary ${latest.status || ''}`;
+  els.jobsSummary.innerHTML = `
+    <strong>최근 실행: ${escapeHtml(latest.status || '-')}</strong>
+    <span>${escapeHtml(formatDateTime(latest.started_at))} 시작 · ${escapeHtml(latest.message || '메시지 없음')}</span>
+  `;
+
+  els.jobRows.innerHTML = rows.map((job) => `
+    <tr>
+      <td>${escapeHtml(formatDateTime(job.started_at))}</td>
+      <td><span class="status-pill ${escapeHtml(job.status || 'warn')}">${escapeHtml(job.status || '-')}</span></td>
+      <td>${escapeHtml(formatJobPeriod(job))}</td>
+      <td>${escapeHtml(formatUploadCounts(job))}</td>
+      <td class="message-cell">${escapeHtml(job.message || '-')}</td>
+      <td>${job.log_path ? `<span class="log-path">${escapeHtml(job.log_path)}</span>` : '-'}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadJobRuns() {
+  els.reloadJobsButton.disabled = true;
+  els.jobsSummary.className = 'jobs-summary empty-state';
+  els.jobsSummary.textContent = '최근 실행 내역을 불러오는 중입니다...';
+
+  try {
+    renderJobRuns(await fetchJson('/api/job-runs'));
+  } catch (error) {
+    els.jobsSummary.className = 'jobs-summary error';
+    els.jobsSummary.textContent = `자동화 로그 로드 실패: ${error.message}`;
+    els.jobRows.innerHTML = '';
+  } finally {
+    els.reloadJobsButton.disabled = false;
+  }
 }
 
 async function loadReports() {
   const data = await fetchJson('/api/reports');
   state.reports = data.reports || [];
   state.currentDate = state.currentDate || state.reports[0]?.date || null;
-  renderReportList();
+  renderReportPicker();
 
   if (state.currentDate) {
     await loadReport(state.currentDate);
@@ -257,8 +481,10 @@ async function uploadToSupabase() {
     state.currentReport.comment = result.comment;
     state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
     els.summaryStatus.textContent = result.comment.status;
-    els.previewLink.href = `/${state.currentReport.preview_html}`;
-    els.saveMessage.textContent = `저장·발행 완료: ${result.supabase.report_date}, ${result.supabase.observation_count}개 지표`;
+    const previewUrl = `/${state.currentReport.preview_html}`;
+    els.previewFrame.src = previewUrl;
+    els.previewOpenLink.href = previewUrl;
+    els.saveMessage.textContent = `저장·발행 완료: ${result.supabase.report_date}`;
     els.saveMessage.className = 'save-message ok';
   } catch (error) {
     els.saveMessage.textContent = `저장 실패: ${error.message}`;
@@ -268,11 +494,44 @@ async function uploadToSupabase() {
   }
 }
 
+async function runValidation() {
+  if (!state.currentDate) return;
+
+  els.runValidationButton.disabled = true;
+  els.validationSummary.className = 'validation-summary';
+  els.validationSummary.textContent = '검증 실행 중입니다...';
+  els.validationRows.innerHTML = '';
+  els.validationMessages.innerHTML = '';
+
+  try {
+    const result = await fetchJson(`/api/validation/${state.currentDate}`);
+    state.validationResult = result;
+    renderValidation(result);
+  } catch (error) {
+    els.validationSummary.className = 'validation-summary error';
+    els.validationSummary.textContent = `검증 실패: ${error.message}`;
+  } finally {
+    els.runValidationButton.disabled = false;
+  }
+}
+
 els.refreshButton.addEventListener('click', () => loadReports());
+els.reportSelect.addEventListener('change', () => {
+  if (els.reportSelect.value) {
+    loadReport(els.reportSelect.value);
+  }
+});
 els.draftButton.addEventListener('click', generateDraft);
 els.uploadButton.addEventListener('click', uploadToSupabase);
+els.runValidationButton.addEventListener('click', runValidation);
+els.reloadJobsButton.addEventListener('click', loadJobRuns);
+els.dailyReportMenuButton.addEventListener('click', () => setView('data'));
+els.jobRunsMenuButton.addEventListener('click', () => setView('jobs'));
+els.viewTabs.forEach((button) => {
+  button.addEventListener('click', () => setView(button.dataset.view));
+});
 
 loadReports().catch((error) => {
   els.reportTitle.textContent = '관리자 화면 오류';
-  els.metricRows.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(error.message)}</td></tr>`;
+  els.metricRows.innerHTML = `<tr><td colspan="4" class="empty-state">${escapeHtml(error.message)}</td></tr>`;
 });

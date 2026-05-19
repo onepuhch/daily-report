@@ -128,7 +128,7 @@ function renderMetricChart(series) {
     archiveEls.chartCanvas.innerHTML = `
       <div class="single-point">
         <strong>${formatNumber(point.value)} ${escapeHtml(point.unit || series.unit || '')}</strong>
-        <span>${escapeHtml(point.report_date)} · 1D ${formatNumber(point.change_1d)}${escapeHtml(point.change_1d_unit || '')}</span>
+        <span>${escapeHtml(point.report_date)} · 전일대비 ${formatNumber(point.change_1d)}${escapeHtml(point.change_1d_unit || '')}</span>
       </div>
     `;
     return;

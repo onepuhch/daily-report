@@ -1,5 +1,59 @@
 # 인수인계서 (이 파일 하나만 보면 됩니다)
 
+## 2026-05-19 현재 목표와 다음 작업
+
+목표는 시니어 수준의 개발자가 만든 내부 운영 도구처럼 데일리 리포트 작성과 발행을 자동화하는 것이다.
+
+제품 목표:
+- 하네스 스켈레톤 코드 기반으로 개발한다.
+- 데이터는 인포맥스 Excel add-in을 우선 원천으로 사용한다.
+- Excel을 열고 일정 시간 대기해 각 시트 데이터 갱신이 완료되면 Supabase로 전송한다.
+- Supabase 수치 데이터를 기준으로 리포트 페이지를 생성하고 조회한다.
+- 리포트 코멘트는 관리자 페이지에서 수정/입력한다.
+- AI는 뉴스 데이터, 지정 텔레그램/참고 메모, 수치 데이터, 과거 코멘트를 기반으로 코멘트 초안을 작성한다.
+- AI 초안은 자동 발행하지 않고, 사람이 검토해 최종 코멘트로 확정한다.
+- 단, 사용자가 부재중인 날에는 AI 코멘트를 자동 발행할 수 있는 운영 모드가 필요하다.
+  - 기본값은 수동 검토 모드.
+  - 자동 발행 모드는 별도 설정/스케줄 조건으로 켠다.
+  - 자동 발행 시에는 초안 생성 근거, 사용 데이터, 발행 상태, 작업 로그를 반드시 남긴다.
+- 최종 리포트 디자인은 계속 개선하고, AI API 기반 챗봇을 붙인다.
+- Codex는 각 단계에서 개선/추가/수정할 부분을 계속 검토한다.
+- 진행 상황, 결정 사항, 다음 작업은 이 `HANDOFF.md`에 기록한다.
+
+현재 방향 판단:
+- 방향은 맞다.
+- 아직 완성품은 아니고, 작동하는 프로토타입에서 운영 가능한 내부 도구로 올리는 단계다.
+- 과거 PNG OCR은 초기 백필 1회 작업이다. 추가 과거 파일이 생기지 않는 한 일일 자동화 경로에는 포함하지 않는다.
+
+현재 DB/자동화 상태:
+- `reports`: 286건 (`2025-04-14` ~ `2026-05-18`)
+- `market_observations`: 9,834건
+- `report_comments`: 286건
+- `source_documents`: 194건 (`2025-07-15` ~ `2026-05-18`)
+- Windows 작업 스케줄러 `Market Daily Supabase Upload` 등록 완료, 매일 08:30 실행.
+- 상태 점검은 `scripts/07_check_pipeline_status.cmd`로 확인한다.
+- `job_runs` 테이블 생성 완료. `scripts/Run-DailyMarketUpdate.ps1` 실행 시 `started/success/failed` 로그가 DB에 기록된다.
+- 2026-05-19 08:30 자동 실행은 Excel COM 저장 단계에서 1회 실패했으나, 남은 Excel 프로세스를 종료하고 `Run-DailyMarketUpdate.ps1 -Visible -LookbackDays 10`로 재실행해 성공 처리했다.
+- 다른 PC/다른 사람이 수동 복구할 때는 `scripts/08_manual_reupload.cmd`를 실행한다.
+  - 실패 시 최근 로그와 마지막 오류를 화면에 출력한다.
+  - 상태 확인은 `scripts/07_check_pipeline_status.cmd`.
+  - 데이터 검증은 `scripts/09_validate_daily_data.cmd`.
+- 최신 검증 프로세스:
+  - 로컬 JSON 핵심 지표 존재/숫자 여부 확인.
+  - Supabase `reports`, `market_observations`, `report_comments` 반영 여부 확인.
+  - Yahoo Finance 기준 KOSPI, USD/KRW, WTI, US 10Y 경고 수준 크로스체크.
+  - 외부 가격 비교는 시차/종가 기준 차이가 있으므로 당장은 경고로만 사용한다.
+
+다음 우선순위:
+1. 문서와 관리자 화면의 한글 인코딩 깨짐 정리
+2. DB 업로드 경로를 Python 중심으로 통일
+3. 공개 리포트 렌더링을 Supabase 기준으로 정리
+4. 과거 코멘트/참고자료 embedding 생성 후 RAG 검색 연결
+5. 수동 검토 모드와 부재중 자동 발행 모드 분리 설계
+6. 자동 검증 실패 시 알림/발행 차단 정책 설계
+
+---
+
 ## 2026-05-18 Codex update
 
 - Pulled `origin/master` to `512348f`.
@@ -188,3 +242,307 @@ git push
 - `design.md` — 디자인 시스템 SSOT (토큰·컴포넌트·반응형)
 - `AGENTS.md` — 프로젝트 전반 규칙 (데이터 원천, 산출물 정의)
 - `git log` — 모든 작업 history
+## 2026-05-19 Codex update - 목표와 현재 방향
+
+### 최종 목표
+
+시니어 수준의 개발자가 만든 내부 운영 도구처럼, 데일리 리포트 작성과 발행 과정을 자동화한다.
+
+핵심 기준:
+- 매일 반복되는 수작업을 줄인다.
+- 데이터 원천과 발행 결과를 추적 가능하게 만든다.
+- 사람이 최종 판단과 발행 권한을 갖는다.
+- 숫자 데이터, 코멘트, 참고 자료를 Supabase에 누적해 이후 AI 검색과 챗봇에 활용한다.
+- 다음 개발자나 AI 도구가 `HANDOFF.md`만 보고 이어받을 수 있게 유지한다.
+
+### 제품 목표
+
+1. 하네스 스켈레톤 코드 기반으로 개발한다.
+2. 데이터는 인포맥스 Excel add-in을 우선 원천으로 사용한다.
+3. Excel을 열고 일정 시간 대기해 각 시트의 데이터 갱신이 완료되면 Supabase로 전송한다.
+4. Supabase에 쌓인 수치 데이터를 기준으로 리포트 페이지를 생성하고 조회할 수 있게 한다.
+5. 리포트 코멘트는 관리자 페이지에서 수정하고 입력할 수 있게 한다.
+6. AI는 뉴스 데이터, 지정 텔레그램/참고 메모, 수치 데이터, 과거 코멘트를 기반으로 코멘트 초안을 작성한다.
+7. AI 초안은 자동 발행하지 않고, 사람이 관리자 페이지에서 검토하고 최종 코멘트로 확정한다.
+8. 최종 리포트 페이지 디자인은 계속 개선한다.
+9. AI API를 통해 리포트 조회 화면에 챗봇을 붙인다.
+10. 각 단계에서 개선, 추가, 수정할 부분은 Codex가 지속적으로 검토하고 제안한다.
+11. 협업과 인수인계를 위해 진행 상황, 결정 사항, 다음 작업은 계속 `HANDOFF.md`에 기록한다.
+
+### 현재 방향 판단
+
+현재 방향은 맞다. 다만 완성 상태는 아니며, 지금은 작동하는 프로토타입에서 운영 가능한 내부 도구로 넘어가는 단계다.
+
+이미 진행된 축:
+- Excel 캐시/시트 기반 수치 추출
+- Supabase 스키마와 REST 권한 설정
+- 과거 수치 데이터 백필
+- 과거 PNG OCR 코멘트 1회 백필
+- 관리자 코멘트 입력/수정 흐름
+- 공개 리포트 HTML 초안
+- 매일 자동 실행용 Windows 작업 스케줄러 등록
+
+아직 남은 핵심 축:
+- 일일 자동 실행 결과의 DB 기반 작업 로그
+- Supabase를 단일 기준으로 삼는 리포트 렌더링 정리
+- 관리자 화면 한글 인코딩과 문구 정리
+- 실제 LLM 기반 코멘트 초안 생성
+- 과거 코멘트/참고 자료 embedding 생성과 RAG 검색
+- 뉴스/텔레그램 수집 방식 결정 및 구현
+- 최종 리포트 디자인과 모바일 대응
+- AI 챗봇과 질의 기반 차트 기능
+
+### 과거 PNG OCR의 위치
+
+과거 PNG OCR은 매일 반복할 작업이 아니라 초기 백필 작업이다.
+
+현재 `source_documents`에 쌓인 과거 OCR 데이터는 향후 RAG/유사 사례 검색의 참고 자료로 사용한다. 추가 과거 파일이 생기지 않는 한, 일일 자동화의 핵심 경로에는 포함하지 않는다.
+
+일일 반복 경로:
+
+```text
+인포맥스 Excel 갱신
+-> 수치 데이터 추출
+-> Supabase 업로드
+-> 관리자 코멘트 작성/AI 초안 생성
+-> 최종 검토 및 발행
+-> 공개 리포트/챗봇 조회
+```
+
+### 2026-05-18~19 진행 현황
+
+- Supabase 권한 SQL 실행 후 REST 업로드 정상화.
+- 수치 데이터 업로드 완료:
+  - `reports`: 285건 (`2025-04-14` ~ `2026-05-15`)
+  - `market_observations`: 9,799건
+  - `report_comments`: 285건
+- 과거 OCR 코멘트 업로드 완료:
+  - `source_documents`: 194건 (`2025-07-15` ~ `2026-05-18`)
+- 자동화 등록:
+  - Windows 작업 스케줄러 `Market Daily Supabase Upload`
+  - 매일 08:30 실행
+  - 실행 스크립트: `scripts/Run-DailyMarketUpdate.ps1`
+  - 최근 10일 구간을 재업로드해 누락 보정
+
+### 다음 우선순위
+
+1. `HANDOFF.md` 최신화와 문서 인코딩 정리
+2. 일일 자동 실행 상태 점검 도구 보강
+3. DB 작업 로그 테이블 추가
+4. 관리자 화면 한글 문구 복구
+5. 리포트 렌더링을 Supabase 기준으로 정리
+6. embedding/RAG 검색 기반 코멘트 초안 준비
+7. 실제 AI API 연결
+
+---
+## 2026-05-19 update: pre-upload validation gate
+
+The daily data load is now split into an operational gate:
+
+1. Open/refresh Excel unless `-SkipRefresh` is used.
+2. Extract recent report JSON only. No Supabase write happens in this step.
+3. Validate the extracted JSON before upload.
+   - Required local metrics must exist and be numeric.
+   - Yahoo Finance cross-check runs for all configured Yahoo-mappable metrics.
+   - Cross-check mismatches are strict in the automated pipeline and block upload.
+   - Supabase DB validation is skipped in this pre-upload step because the row may not exist yet.
+4. Upload to Supabase only after pre-upload validation passes.
+5. Run post-upload DB validation against Supabase `reports`, `market_observations`, and `report_comments`.
+6. Record `started/success/failed` in `job_runs` with the log path.
+
+Verified command:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\Run-DailyMarketUpdate.ps1 -SkipRefresh -LookbackDays 2
+```
+
+Verified result:
+
+- Run id: `7f8939f0-4bed-45ec-a9e7-c53ee12d317f`
+- Report date: `2026-05-18`
+- Observations: 35
+- Pre-upload Yahoo cross-check: pass
+- Supabase upload: 1 report, 35 observations
+- Post-upload DB validation: pass
+
+Key files:
+
+- `scripts/Run-DailyMarketUpdate.ps1`
+- `scripts/validate_daily_data.py`
+- `scripts/Validate-DailyData.ps1`
+
+---
+
+## 2026-05-19 update: admin date picker layout
+
+Admin validation tab is kept, but the report date navigation has been simplified.
+
+- Removed the long full-date list from the left sidebar.
+- Moved report date selection into the top summary area as a dropdown.
+- Repurposed the left sidebar for current report status:
+  - 기준일
+  - 지표 수
+  - 코멘트 상태
+  - 생성 시각
+- Left sidebar now shows only the latest 5 reports as quick shortcuts.
+
+Rationale: daily reports will accumulate quickly, so a full date list makes the admin screen noisy. The date dropdown is enough for navigation, while the sidebar is more valuable as an operational status panel.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `http://127.0.0.1:4177/admin` returned 200
+- `http://127.0.0.1:4177/api/reports` returned 200
+
+Follow-up UI adjustment:
+
+- Removed the "Recent 5 reports" sidebar shortcuts.
+- Reworked the sidebar as current status + admin menu:
+  - 데이터
+  - 검증
+  - HTML 미리보기
+- Removed metric-count display from the admin UI because it is not operationally important.
+- Renamed the main tab from `데이터/코멘트` to `데이터`.
+- Removed the source column from the data table.
+- Renamed table change columns:
+  - `1D` -> `전일대비`
+  - `YTD` -> `작년말대비`
+- Made the comment workflow pane independently scrollable on desktop so long market data tables do not force the user to scroll the full page just to reach the final comment/publish controls.
+- Refined navigation model:
+  - Left sidebar is now reserved for top-level modules, not duplicated one-day tabs.
+  - Central tabs are for the selected report date only: `데이터`, `코멘트`, `검증`.
+  - `Current Report` sidebar summary was removed because date/status/generated are already in the top summary.
+  - `HTML 미리보기` remains only in the sidebar output area.
+- Split comments into a separate `코멘트` tab.
+  - Added placeholder research blocks for future bond Google crawling and Telegram crawling.
+  - This matches the intended workflow where the user reviews crawled references while writing the final comment.
+- Simplified validation table:
+  - `엑셀/DB 값` -> `DB`
+  - Removed `% 차이` and `허용` columns.
+  - Result now shows whether DB and Yahoo are `일치` or `다름`.
+
+---
+
+## 2026-05-19 update: admin workflow direction alignment
+
+Accepted the revised UI direction after comparing alternatives:
+
+- Keep the `데이터` tab as a dense operator table. Do not replace it with the public report card layout.
+- Add `미리보기` as a first-class central tab that embeds the generated HTML report.
+- Keep `코멘트` and `검증` as selected-date workflow tabs.
+- Move `자동화 로그` into the left sidebar as a top-level operations module.
+- Remove low-value legacy labels and aliases:
+  - `1D` -> `전일대비`
+  - `YTD` -> `작년말대비`
+  - removed admin CSS `--red`, `--blue`, `--green` compatibility aliases
+  - aligned public report up/down colors to Korean market convention: 상승 red, 하락 blue
+- Added `/api/job-runs` for recent automation outcomes from Supabase `job_runs`.
+- Added `docs/AI_CONTEXT_CONTRACT.md` so future chart panels, RAG, and chatbot features share the same metric context.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\report\app.js`
+- Legacy label/token grep returned no matches for `--red`, `--blue`, `--green`, `1D`, `YTD` under `src` and `scripts`.
+- Temporary admin server on port `4180` returned:
+  - `/api/health`: 200
+  - `/api/job-runs`: 200
+  - `/admin`: 200
+
+Next recommended steps:
+
+1. Add validation approval history before adding any DB overwrite function.
+2. Design the public report metric detail panel and mobile bottom sheet using the AI context contract.
+3. Implement the LLM adapter behind the context contract, with Qwen as the first candidate and DeepSeek as a comparison candidate.
+
+---
+
+## 2026-05-19 update: validation approval history
+
+Added a first version of validation approval history.
+
+Purpose:
+
+- When DB/Infomax values differ from Yahoo Finance but the operator decides the DB value is acceptable, record that decision.
+- Avoid adding a risky "overwrite DB with Yahoo" function before approval/audit flow exists.
+
+Files:
+
+- `db/validation_approvals.sql`
+- `db/schema.sql`
+- `src/daily_report/admin/server.mjs`
+- `src/daily_report/admin/index.html`
+- `src/daily_report/admin/app.js`
+- `src/daily_report/admin/styles.css`
+
+Behavior:
+
+- New table: `validation_approvals`
+  - unique by `(report_id, metric_key, source)`
+  - stores DB value, external value, source symbol, reason, approved_by, approved_at
+- `GET /api/validation/:date` now attaches approval history to validation rows.
+- `POST /api/validation/:date/approvals` records or updates an approval.
+- Admin validation tab shows:
+  - `우리 값 승인` button on mismatch rows
+  - `승인됨` badge for approved mismatches
+  - approval history block below the table
+
+Operational note:
+
+- Run `db/validation_approvals.sql` once in Supabase SQL Editor before using the approval button in production.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- Temporary admin server on port `4181` returned:
+  - `/api/health`: 200
+  - `/admin`: 200
+  - `/api/validation/2026-05-18`: 200
+  - current approval count: 0
+
+---
+
+## 2026-05-19 update: public report metric detail panel
+
+Added the first public-report interaction layer for the long-term chart/chat direction.
+
+Behavior:
+
+- `/report` is now served by the Admin server.
+- `/report/app.js` and `/report/styles.css` are now served under `/report/`.
+- Public report metric rows are clickable and keyboard-accessible.
+- Clicking a metric opens:
+  - desktop: right-side detail panel
+  - mobile: bottom sheet
+- Detail panel shows:
+  - metric name/category
+  - current value
+  - `전일대비`
+  - `작년말대비`
+  - up to 20 historical points from `/api/metrics/:metric_key/series`
+  - current report comment as the first context note
+- Added `/api/history?days=n` because the public report already referenced it for sparklines.
+- The detail panel can prefill the chat input with a metric-specific question.
+- Public chat call was aligned from missing `/api/chat` to existing `/api/ask`.
+
+Verified:
+
+- `node --check src\daily_report\report\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- Temporary admin server on port `4183` returned:
+  - `/report`: 200
+  - `/api/history?days=3`: 200
+  - `/api/metrics/kospi/series`: 200
+
+## 2026-05-19 Codex update - Chart.js cleanup and AI context payload
+
+- Kept D-003 instead of superseding it: no Chart.js / D3 dependency for public report charts.
+- Removed the Chart.js CDN from `src/daily_report/report/index.html`.
+- Replaced public report sparkline, metric detail chart, and chat chart rendering with inline SVG.
+- Chart colors now read CSS design tokens (`--up`, `--down`, `--primary`, `--warn`) instead of hard-coded financial colors.
+- `/api/ask` request payload now follows the agreed AI context shape as far as current data allows: `surface`, `selected_metric`, `report_comment`, `validation`, `history`, and `research_items`.
+- `research_items` is currently an empty array until Google/Telegram/manual-note collectors are implemented.

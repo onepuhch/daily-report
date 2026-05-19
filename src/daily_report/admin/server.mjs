@@ -1,15 +1,19 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '../../..');
 const processedDir = path.join(projectRoot, 'data', 'processed');
 const outputDir = path.join(projectRoot, 'output');
+const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
+const execFileAsync = promisify(execFile);
 
 const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -42,16 +46,29 @@ function parseJson(raw) {
   return JSON.parse(raw.replace(/^\uFEFF/, ''));
 }
 
+function resolvePython() {
+  const venvPython = path.join(projectRoot, '.venv-docling', 'Scripts', 'python.exe');
+  return process.env.DAILY_REPORT_PYTHON || venvPython;
+}
+
 async function readDotEnv() {
   const values = {};
   let raw = '';
+  const candidates = [
+    path.join(projectRoot, '.env'),
+    path.join(projectRoot, '..', '.env'),
+  ];
 
-  try {
-    raw = await readFile(path.join(projectRoot, '.env'), 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') return values;
-    throw error;
+  for (const filePath of candidates) {
+    try {
+      raw = await readFile(filePath, 'utf8');
+      break;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
+
+  if (!raw) return values;
 
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -367,36 +384,29 @@ function buildReviewHtml(report, comment) {
   const byKey = new Map((report.observations || []).map((item) => [item.metric_key, item]));
   const workbookName = report.source_workbook ? path.basename(report.source_workbook) : '-';
   const pick = (keys) => keys.map((key) => byKey.get(key)).filter(Boolean);
-  const tickerItems = [
-    ['kospi', 'KOSPI'],
-    ['usdkrw', 'USD/KRW'],
-    ['us_10y', 'US10Y'],
-    ['wti', 'WTI'],
-    ['gold', 'GOLD'],
-  ].map(([key, label]) => ({ item: byKey.get(key), label })).filter(({ item }) => item);
 
   const columns = [
     {
       label: '국내',
       groups: [
-        { title: '국내금리', rows: pick(['kr_cd91', 'kr_1y', 'kr_3y', 'kr_5y', 'kr_10y', 'kr_30y']) },
+        { title: '국내금리', rows: pick(['kr_cd91', 'cd_91d', 'kr_1y', 'kr_3y', 'kr_5y', 'kr_10y', 'kr_30y', 'kr_gov_2y', 'kr_gov_3y', 'kr_gov_5y', 'kr_gov_10y', 'kr_gov_30y']) },
         { title: '국내주식', rows: pick(['kospi', 'kosdaq', 'kospi200']) },
-        { title: '크레딧', rows: pick(['kr_aa3y', 'kr_bbb3y']) },
+        { title: '크레딧', rows: pick(['kr_aa3y', 'kr_bbb3y', 'kr_corp_aa0_3y', 'credit_spread_aa0_2y']) },
       ],
     },
     {
       label: '해외 금리·주식',
       groups: [
-        { title: '해외금리', rows: pick(['us_2y', 'us_5y', 'us_10y', 'us_30y', 'de_10y']) },
-        { title: '해외주식', rows: pick(['sp500', 'nasdaq', 'nikkei', 'shanghai']) },
+        { title: '해외금리', rows: pick(['us_2y', 'us_5y', 'us_10y', 'us_30y', 'de_10y', 'jp_10y', 'us_treasury_2y', 'us_treasury_10y', 'us_treasury_30y', 'germany_bund_10y', 'japan_gov_10y']) },
+        { title: '해외주식', rows: pick(['dow', 'sp500', 'nasdaq', 'dax', 'nikkei', 'nikkei225', 'hangseng_h', 'shanghai', 'shanghai_comp']) },
       ],
     },
     {
       label: '외환·원자재·암호화폐',
       groups: [
-        { title: '외환', rows: pick(['usdkrw', 'dxy']) },
-        { title: '원자재', rows: pick(['wti', 'brent', 'gold', 'silver', 'copper']) },
-        { title: '암호화폐', rows: pick(['bitcoin', 'btc_usd']) },
+        { title: '외환', rows: pick(['usdkrw', 'dxy', 'dollar_index', 'usdjpy', 'eurusd']) },
+        { title: '원자재', rows: pick(['wti', 'brent', 'gold', 'silver', 'sox', 'copper']) },
+        { title: '암호화폐', rows: pick(['bitcoin', 'btc_usd', 'btc', 'ethereum', 'eth_usd', 'eth']) },
       ],
     },
   ];
@@ -411,13 +421,6 @@ function buildReviewHtml(report, comment) {
   if (leftover.length > 0) {
     columns[2].groups.push({ title: '기타', rows: leftover });
   }
-
-  const renderTicker = ({ item, label }) => `
-    <article class="ticker-chip ${Number(item.change_1d) > 0 ? 'is-up' : Number(item.change_1d) < 0 ? 'is-down' : 'is-flat'}">
-      <span>${escapeHtml(label)}</span>
-      <strong>${formatNumber(item.value)}${item.unit ? `<small>${escapeHtml(item.unit)}</small>` : ''}</strong>
-      <em>1D ${formatChangeText(item.change_1d, item.change_1d_unit)}</em>
-    </article>`;
 
   const renderMetricRow = (item) => `
     <tr data-metric-key="${escapeHtml(item.metric_key)}">
@@ -437,15 +440,14 @@ function buildReviewHtml(report, comment) {
       <section class="metric-card">
         <header class="metric-card-head">
           <h2>${escapeHtml(group.title)}</h2>
-          <span>${group.rows.length}</span>
         </header>
         <table>
           <thead>
             <tr>
               <th scope="col">지표명</th>
               <th scope="col">값</th>
-              <th scope="col">1D</th>
-              <th scope="col">YTD</th>
+              <th scope="col">전일 대비</th>
+              <th scope="col">전년말 대비</th>
               <th scope="col">추이</th>
             </tr>
           </thead>
@@ -502,15 +504,12 @@ function buildReviewHtml(report, comment) {
       --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI",
                    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 
-      /* Backward-compat aliases (Phase B에서 점진 제거) */
+      /* Legacy layout aliases */
       --paper: var(--surface);
       --ink: var(--text);
       --line: var(--border);
       --soft: var(--bg);
       --soft-strong: var(--border);
-      --red: var(--up);
-      --blue: var(--down);
-      --green: var(--status-published);
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -747,8 +746,8 @@ function buildReviewHtml(report, comment) {
       font-size: 11px;
     }
     .muted { color: var(--muted); }
-    .up { color: var(--red); font-weight: 650; }
-    .down { color: var(--blue); font-weight: 650; }
+    .up { color: var(--up); font-weight: 650; }
+    .down { color: var(--down); font-weight: 650; }
     .flat { color: var(--muted); font-weight: 650; }
     .source {
       color: var(--muted);
@@ -809,55 +808,6 @@ function buildReviewHtml(report, comment) {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .ticker-strip {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-      min-width: 0;
-      overflow-x: auto;
-      scrollbar-width: none;
-    }
-    .ticker-strip::-webkit-scrollbar { display: none; }
-    .ticker-chip {
-      align-items: center;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      display: grid;
-      gap: 1px;
-      grid-template-columns: auto auto;
-      min-width: 118px;
-      padding: 5px 8px;
-    }
-    .ticker-chip span {
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .ticker-chip strong {
-      color: var(--text-strong);
-      font-size: 13px;
-      font-variant-numeric: tabular-nums;
-      justify-self: end;
-      line-height: 1;
-    }
-    .ticker-chip small {
-      color: var(--muted);
-      font-size: 9px;
-      font-weight: 600;
-      margin-left: 2px;
-    }
-    .ticker-chip em {
-      font-size: 10px;
-      font-style: normal;
-      font-variant-numeric: tabular-nums;
-      font-weight: 700;
-      grid-column: 1 / -1;
-      justify-self: end;
-    }
-    .ticker-chip.is-up em { color: var(--up); }
-    .ticker-chip.is-down em { color: var(--down); }
-    .ticker-chip.is-flat em { color: var(--flat); }
     .report-meta {
       align-items: center;
       display: flex;
@@ -1016,14 +966,12 @@ function buildReviewHtml(report, comment) {
         height: auto;
         padding-bottom: 8px;
       }
-      .ticker-strip { justify-content: flex-start; }
       .metric-grid,
       #details { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       main { padding-top: 10px; width: min(100% - 20px, 1440px); }
       .report-meta { flex-wrap: wrap; }
-      .ticker-chip { min-width: 104px; }
       .metric-card th,
       .metric-card td { font-size: 12px; padding-left: 6px; padding-right: 6px; }
       .metric-key { display: none; }
@@ -1046,13 +994,10 @@ function buildReviewHtml(report, comment) {
         <strong>${escapeHtml(formatDateKo(reportDate))}</strong>
         <span>${escapeHtml(formatDateTimeKo(report.generated_at))} 생성</span>
       </div>
-      <div class="ticker-strip" aria-label="key metrics">
-        ${tickerItems.map(renderTicker).join('\n')}
-      </div>
     </header>
 
     <section id="commentary" class="comment">
-      <h2>시장 코멘트</h2>
+      <h2>Issue</h2>
       <button class="comment-toggle" type="button" aria-expanded="false">More</button>
       <div class="comment-body">${textToParagraphs(mainComment)}</div>
     </section>
@@ -1159,6 +1104,14 @@ async function readReport(date) {
   };
 }
 
+async function getReportRowByDate(date) {
+  const rows = await supabaseRest(
+    'GET',
+    `reports?select=id,report_date&report_date=eq.${date}&limit=1`,
+  );
+  return Array.isArray(rows) ? rows[0] : null;
+}
+
 async function getMetricSeries(metricKey) {
   const cleanMetricKey = String(metricKey || '').trim();
   if (!cleanMetricKey) {
@@ -1198,6 +1151,30 @@ async function getMetricSeries(metricKey) {
     unit,
     points,
   };
+}
+
+async function getMetricHistory(days = 7) {
+  const safeDays = Math.max(1, Math.min(Number(days) || 7, 60));
+  const reports = await readAllReports();
+  const recentReports = reports.slice(-safeDays);
+  const history = {};
+
+  for (const report of recentReports) {
+    for (const item of report.observations || []) {
+      if (!history[item.metric_key]) history[item.metric_key] = [];
+      history[item.metric_key].push({
+        report_date: report.report_date,
+        value: item.value,
+        unit: item.unit,
+        change_1d: item.change_1d,
+        change_1d_unit: item.change_1d_unit,
+        change_ytd: item.change_ytd,
+        change_ytd_unit: item.change_ytd_unit,
+      });
+    }
+  }
+
+  return { history };
 }
 
 async function getLatestReportDate() {
@@ -1250,7 +1227,7 @@ function scoreObservation(item, question) {
 }
 
 function observationToAnswerLine(item) {
-  return `${item.metric_name}: ${formatNumber(item.value)}${item.unit || ''}, 1D ${formatChangeText(item.change_1d, item.change_1d_unit)}, YTD ${formatChangeText(item.change_ytd, item.change_ytd_unit)}`;
+  return `${item.metric_name}: ${formatNumber(item.value)}${item.unit || ''}, 전일대비 ${formatChangeText(item.change_1d, item.change_1d_unit)}, 작년말대비 ${formatChangeText(item.change_ytd, item.change_ytd_unit)}`;
 }
 
 async function answerMarketQuestion(payload = {}) {
@@ -1483,15 +1460,155 @@ async function uploadReportToSupabase(date, payload) {
   };
 }
 
+async function validateReport(date) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const python = resolvePython();
+  const scriptPath = path.join(projectRoot, 'scripts', 'validate_daily_data.py');
+  const args = [
+    scriptPath,
+    '--project-root',
+    projectRoot,
+    '--report-date',
+    date,
+    '--cross-check',
+  ];
+
+  try {
+    const { stdout } = await execFileAsync(python, args, {
+      cwd: projectRoot,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024 * 8,
+    });
+    return await attachValidationApprovals(date, parseJson(stdout));
+  } catch (error) {
+    const stdout = error.stdout ? String(error.stdout) : '';
+    if (stdout.trim()) {
+      try {
+        return await attachValidationApprovals(date, parseJson(stdout));
+      } catch {
+        // Fall through to the process error below.
+      }
+    }
+
+    const stderr = error.stderr ? String(error.stderr).trim() : '';
+    const wrapped = new Error(stderr || error.message || 'Validation failed.');
+    wrapped.statusCode = 500;
+    throw wrapped;
+  }
+}
+
+async function getValidationApprovals(date) {
+  const report = await getReportRowByDate(date);
+  if (!report?.id) return [];
+
+  const rows = await supabaseRest(
+    'GET',
+    `validation_approvals?select=id,report_id,metric_key,metric_name,source,symbol,db_value,external_value,reason,approved_by,approved_at&report_id=eq.${report.id}&order=approved_at.desc`,
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function attachValidationApprovals(date, result) {
+  try {
+    const approvals = await getValidationApprovals(date);
+    const byMetric = new Map(approvals.map((approval) => [approval.metric_key, approval]));
+    const crossChecks = (result.cross_checks || []).map((check) => {
+      const approval = byMetric.get(check.metric_key);
+      return approval ? { ...check, approval, approved: true } : check;
+    });
+
+    return {
+      ...result,
+      approvals,
+      cross_checks: crossChecks,
+    };
+  } catch (error) {
+    return {
+      ...result,
+      approvals: [],
+      warnings: [
+        ...(result.warnings || []),
+        `Validation approval history unavailable: ${error.message}`,
+      ],
+    };
+  }
+}
+
+async function approveValidation(date, payload = {}) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const metricKey = String(payload.metric_key || '').trim();
+  if (!metricKey) {
+    const error = new Error('metric_key is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const report = await getReportRowByDate(date);
+  if (!report?.id) {
+    const error = new Error(`Supabase report row missing for ${date}.`);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const row = {
+    report_id: report.id,
+    metric_key: metricKey,
+    metric_name: payload.metric_name || null,
+    source: payload.source || 'Yahoo Finance',
+    symbol: payload.symbol || null,
+    db_value: payload.db_value ?? null,
+    external_value: payload.external_value ?? null,
+    reason: payload.reason || '운영자가 검증 차이를 확인하고 DB 값을 승인했습니다.',
+    approved_by: payload.approved_by || null,
+    approved_at: new Date().toISOString(),
+  };
+
+  const rows = await supabaseRest(
+    'POST',
+    'validation_approvals?on_conflict=report_id,metric_key,source',
+    [row],
+  );
+
+  return {
+    approval: Array.isArray(rows) ? rows[0] : rows,
+  };
+}
+
+async function getJobRuns(limit = 25) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 25, 100));
+  const rows = await supabaseRest(
+    'GET',
+    `job_runs?select=id,job_name,status,started_at,finished_at,report_from,report_until,uploaded_reports,uploaded_observations,message,log_path&order=started_at.desc&limit=${safeLimit}`,
+  );
+
+  return {
+    job_runs: Array.isArray(rows) ? rows : [],
+  };
+}
+
 async function serveStatic(res, requestPath) {
   let filePath;
 
   if (requestPath === '/' || requestPath === '/admin') {
     filePath = path.join(__dirname, 'index.html');
+  } else if (requestPath === '/report') {
+    filePath = path.join(reportDir, 'index.html');
   } else if (requestPath === '/reports' || requestPath === '/archive') {
     filePath = path.join(__dirname, 'archive.html');
   } else if (requestPath.startsWith('/admin/')) {
     filePath = path.join(__dirname, requestPath.replace('/admin/', ''));
+  } else if (requestPath.startsWith('/report/')) {
+    filePath = path.join(reportDir, requestPath.replace('/report/', ''));
   } else if (requestPath.startsWith('/output/')) {
     filePath = path.join(projectRoot, requestPath.slice(1));
   } else {
@@ -1500,9 +1617,10 @@ async function serveStatic(res, requestPath) {
 
   const resolved = path.resolve(filePath);
   const allowedAdmin = resolved.startsWith(__dirname);
+  const allowedReport = resolved.startsWith(reportDir);
   const allowedOutput = resolved.startsWith(outputDir);
 
-  if (!allowedAdmin && !allowedOutput) {
+  if (!allowedAdmin && !allowedReport && !allowedOutput) {
     sendText(res, 403, 'Forbidden');
     return true;
   }
@@ -1538,6 +1656,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestPath === '/api/job-runs') {
+      sendJson(res, 200, await getJobRuns(url.searchParams.get('limit')));
+      return;
+    }
+
     if (req.method === 'POST' && requestPath === '/api/ask') {
       const body = await readBody(req);
       sendJson(res, 200, await answerMarketQuestion(body));
@@ -1550,9 +1673,27 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestPath === '/api/history') {
+      sendJson(res, 200, await getMetricHistory(url.searchParams.get('days')));
+      return;
+    }
+
     const reportMatch = requestPath.match(/^\/api\/reports\/(\d{4}-\d{2}-\d{2})$/);
     if (req.method === 'GET' && reportMatch) {
       sendJson(res, 200, await readReport(reportMatch[1]));
+      return;
+    }
+
+    const validationMatch = requestPath.match(/^\/api\/validation\/(\d{4}-\d{2}-\d{2})$/);
+    if (req.method === 'GET' && validationMatch) {
+      sendJson(res, 200, await validateReport(validationMatch[1]));
+      return;
+    }
+
+    const validationApprovalMatch = requestPath.match(/^\/api\/validation\/(\d{4}-\d{2}-\d{2})\/approvals$/);
+    if (req.method === 'POST' && validationApprovalMatch) {
+      const body = await readBody(req);
+      sendJson(res, 200, await approveValidation(validationApprovalMatch[1], body));
       return;
     }
 

@@ -16,7 +16,12 @@
 data/raw/
 data/processed/
 data/historical_jpg/
+data/historical_ocr/
+data/ocr_samples/
+data/ocr_samples_tesseract/
+data/docling_samples/
 output/
+*.log
 
 # Python
 __pycache__/
@@ -25,6 +30,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.venv-docling/
 venv/
 
 # Node / web app artifacts

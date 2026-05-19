@@ -63,12 +63,9 @@ function Invoke-SupabaseRest {
 
     $headers = @{
         "apikey"        = $ApiKey
+        "Authorization" = "Bearer $ApiKey"
         "Content-Type"  = "application/json"
         "Prefer"        = "resolution=merge-duplicates,return=representation"
-    }
-
-    if ($ApiKey -like "eyJ*") {
-        $headers["Authorization"] = "Bearer $ApiKey"
     }
 
     foreach ($key in $ExtraHeaders.Keys) {
@@ -82,15 +79,17 @@ function Invoke-SupabaseRest {
 
 $root = Get-ScriptProjectRoot
 $envValues = Read-DotEnv -Path (Join-Path $root ".env")
+if ($envValues.Count -eq 0) {
+    $parentEnv = Join-Path (Split-Path -Parent $root) ".env"
+    $envValues = Read-DotEnv -Path $parentEnv
+}
 
 $supabaseUrl = $envValues["SUPABASE_URL"]
 $serviceRoleKey = $envValues["SUPABASE_SERVICE_ROLE_KEY"]
 $anonKey = $envValues["SUPABASE_ANON_KEY"]
 
-# Supabase can show multiple key types. For this local REST script, use the
-# legacy JWT service-role key only when it is present; otherwise use anon.
 $supabaseKey = $anonKey
-if ($serviceRoleKey -and $serviceRoleKey -like "eyJ*") {
+if ($serviceRoleKey) {
     $supabaseKey = $serviceRoleKey
 }
 

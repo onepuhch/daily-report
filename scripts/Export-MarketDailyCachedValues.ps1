@@ -421,7 +421,7 @@ function New-HtmlReport {
 
         [void]$sections.AppendLine("<section class='section'>")
         [void]$sections.AppendLine("<div class='section-head'><h2>$(& $encode $items[0].category_label)</h2><span>$($items.Count)개 지표</span></div>")
-        [void]$sections.AppendLine("<div class='table-wrap'><table><thead><tr><th>지표</th><th>값</th><th>전일대비</th><th>YTD</th><th>출처</th></tr></thead><tbody>")
+        [void]$sections.AppendLine("<div class='table-wrap'><table><thead><tr><th>지표</th><th>값</th><th>전일대비</th><th>작년말대비</th><th>출처</th></tr></thead><tbody>")
         foreach ($item in $items) {
             $changeUnit = if ($item.change_1d_unit -eq "bp") { "bp" } else { "%" }
             [void]$sections.AppendLine("<tr>")
@@ -452,9 +452,9 @@ function New-HtmlReport {
       --muted: #6f6f6f;
       --line: #e6e4df;
       --soft: #f1f0ed;
-      --green: #1f7a4d;
-      --red: #b64b45;
-      --blue: #2f5f9f;
+      --up: #d92d20;
+      --down: #1570ef;
+      --status-published: #067647;
     }
     * { box-sizing: border-box; }
     body {
@@ -574,8 +574,8 @@ function New-HtmlReport {
       font-size: 11px;
     }
     .muted { color: var(--muted); }
-    .up { color: var(--red); font-weight: 650; }
-    .down { color: var(--blue); font-weight: 650; }
+    .up { color: var(--up); font-weight: 650; }
+    .down { color: var(--down); font-weight: 650; }
     .flat { color: var(--muted); font-weight: 650; }
     .source {
       color: var(--muted);

@@ -63,6 +63,39 @@ create table if not exists public.source_documents (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.job_runs (
+  id uuid primary key,
+  job_name text not null,
+  status text not null
+    check (status in ('started', 'success', 'failed')),
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  report_from date,
+  report_until date,
+  uploaded_reports integer,
+  uploaded_observations integer,
+  message text,
+  log_path text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.validation_approvals (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.reports(id) on delete cascade,
+  metric_key text not null,
+  metric_name text,
+  source text not null default 'Yahoo Finance',
+  symbol text,
+  db_value numeric,
+  external_value numeric,
+  reason text,
+  approved_by text,
+  approved_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (report_id, metric_key, source)
+);
+
 create index if not exists idx_reports_report_date
   on public.reports(report_date desc);
 
@@ -77,6 +110,15 @@ create index if not exists idx_report_comments_tags
 
 create index if not exists idx_source_documents_tags
   on public.source_documents using gin(tags);
+
+create index if not exists idx_job_runs_started_at
+  on public.job_runs(started_at desc);
+
+create index if not exists idx_job_runs_status
+  on public.job_runs(status);
+
+create index if not exists idx_validation_approvals_report
+  on public.validation_approvals(report_id, approved_at desc);
 
 -- Vector indexes should be created after enough rows are inserted.
 -- Example:
@@ -99,5 +141,10 @@ for each row execute function public.set_updated_at();
 drop trigger if exists set_report_comments_updated_at on public.report_comments;
 create trigger set_report_comments_updated_at
 before update on public.report_comments
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_job_runs_updated_at on public.job_runs;
+create trigger set_job_runs_updated_at
+before update on public.job_runs
 for each row execute function public.set_updated_at();
 
