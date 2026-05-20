@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -12,6 +12,7 @@ const projectRoot = path.resolve(__dirname, '../../..');
 const processedDir = path.join(projectRoot, 'data', 'processed');
 const outputDir = path.join(projectRoot, 'output');
 const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
+const logsDir = path.join(projectRoot, 'data', 'logs');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
 const execFileAsync = promisify(execFile);
 
@@ -1596,6 +1597,194 @@ async function getJobRuns(limit = 25) {
   };
 }
 
+function summarizeJobLog(job, content) {
+  const text = `${job.message || ''}\n${content || ''}`;
+  const lower = text.toLowerCase();
+  const uploadedMatch = text.match(/"uploaded_reports"\s*:\s*(\d+)\s*,\s*"uploaded_observations"\s*:\s*(\d+)/);
+  const reportsMatch = text.match(/"reports"\s*:\s*(\d+)\s*,\s*"from"\s*:\s*"([^"]+)"\s*,\s*"until"\s*:\s*"([^"]+)"/);
+  const validationPass = /"status"\s*:\s*"pass"/.test(text) && /"errors"\s*:\s*\[\]/.test(text);
+
+  if (job.status === 'success') {
+    const details = [];
+    if (reportsMatch) details.push(`처리 기간: ${reportsMatch[2]} ~ ${reportsMatch[3]}`);
+    if (uploadedMatch) details.push(`DB 업로드: 리포트 ${uploadedMatch[1]}건, 지표 ${uploadedMatch[2]}건`);
+    if (validationPass) details.push('검증 결과: 통과');
+
+    return {
+      level: 'success',
+      title: '자동화가 정상 완료됐습니다.',
+      message: '추가 조치가 필요 없습니다. Admin의 데이터/검증 화면에서 결과만 확인하면 됩니다.',
+      actions: ['데이터 탭에서 주요 지표가 보이는지 확인', '검증 탭에서 차이 항목이 있는지 확인'],
+      details,
+    };
+  }
+
+  if (text.includes('RPC_E_CALL_REJECTED') || text.includes('Call was rejected by callee')) {
+    return {
+      level: 'error',
+      title: 'Excel이 응답하지 않아 자동화가 실패했습니다.',
+      message: 'Infomax Excel 파일을 새로고침하거나 저장하는 중 Excel이 다른 작업으로 바빠서 명령을 거절했습니다.',
+      actions: [
+        '열려 있는 Excel 창을 모두 저장 후 종료',
+        '작업 관리자에서 남은 EXCEL.EXE가 있으면 종료',
+        'Admin 또는 수동 명령으로 자동화를 다시 실행',
+      ],
+      details: ['실패 위치: Excel 저장/종료 단계', '기술 오류: RPC_E_CALL_REJECTED'],
+    };
+  }
+
+  if (lower.includes('supabase')) {
+    return {
+      level: 'error',
+      title: 'Supabase 업로드 또는 조회 단계에서 실패했습니다.',
+      message: 'DB 연결 정보, 네트워크, 테이블 권한 중 하나를 확인해야 합니다.',
+      actions: ['인터넷 연결 확인', '.env의 Supabase URL/key 확인', '잠시 후 같은 날짜로 재실행'],
+      details: [],
+    };
+  }
+
+  if (lower.includes('validation') || text.includes('"status": "fail"')) {
+    return {
+      level: 'warn',
+      title: '데이터 검증 단계에서 확인이 필요합니다.',
+      message: '엑셀에서 추출한 값과 검증 기준이 맞지 않거나 필수 데이터가 누락됐을 수 있습니다.',
+      actions: ['Admin 검증 탭에서 차이 항목 확인', '엑셀 원본 값 확인', '문제가 없으면 운영 기준으로 승인'],
+      details: [],
+    };
+  }
+
+  return {
+    level: job.status === 'failed' ? 'error' : 'warn',
+    title: job.status === 'failed' ? '자동화가 실패했습니다.' : '자동화 로그 확인이 필요합니다.',
+    message: job.message || '로그 원문을 확인해 원인을 판단해야 합니다.',
+    actions: ['로그 원문 마지막 20줄 확인', '엑셀과 네트워크 상태 확인', '같은 조건으로 한 번 재실행'],
+    details: [],
+  };
+}
+
+async function getJobRunLog(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    const error = new Error('Invalid job run id.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const rows = await supabaseRest(
+    'GET',
+    `job_runs?select=id,job_name,status,started_at,message,log_path&id=eq.${encodeURIComponent(id)}&limit=1`,
+  );
+  const job = Array.isArray(rows) ? rows[0] : null;
+  if (!job) {
+    const error = new Error('Job run not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!job.log_path) {
+    const error = new Error('No log file path recorded for this job run.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const resolved = path.resolve(job.log_path);
+  const allowed = resolved.startsWith(path.resolve(logsDir) + path.sep);
+  if (!allowed) {
+    const error = new Error('Log path is outside the allowed log directory.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  let content;
+  try {
+    content = await readFile(resolved, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      const notFound = new Error('Log file does not exist on this computer.');
+      notFound.statusCode = 404;
+      throw notFound;
+    }
+    throw error;
+  }
+
+  return {
+    job,
+    summary: summarizeJobLog(job, content),
+    content,
+  };
+}
+
+function retryModeForJob(job) {
+  const message = String(job.message || '').toLowerCase();
+  if (message.includes('workbook') || message.includes('json extraction') || message.includes('no report json')) {
+    return 'full';
+  }
+  return 'upload_only';
+}
+
+async function startSelectedJobRerun(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    const error = new Error('Invalid job run id.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const rows = await supabaseRest(
+    'GET',
+    `job_runs?select=id,job_name,status,started_at,report_from,report_until,message&id=eq.${encodeURIComponent(id)}&limit=1`,
+  );
+  const job = Array.isArray(rows) ? rows[0] : null;
+  if (!job) {
+    const error = new Error('Job run not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (job.status !== 'failed' && job.status !== 'error') {
+    const error = new Error('Only failed job runs can be rerun from this screen.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const mode = retryModeForJob(job);
+  const scriptPath = path.join(projectRoot, 'scripts', 'Run-DailyMarketUpdate.ps1');
+  const args = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    scriptPath,
+  ];
+
+  if (job.report_from) {
+    args.push('-FromDate', job.report_from);
+  }
+  if (job.report_until) {
+    args.push('-UntilDate', job.report_until);
+  }
+  if (mode === 'upload_only') {
+    args.push('-SkipRefresh');
+  } else {
+    args.push('-Visible');
+  }
+
+  const child = spawn('powershell.exe', args, {
+    cwd: projectRoot,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
+
+  return {
+    started: true,
+    source_job_id: job.id,
+    mode,
+    report_from: job.report_from,
+    report_until: job.report_until,
+    message: mode === 'upload_only'
+      ? '선택한 실패 건의 데이터 검증/DB 업로드 재실행을 시작했습니다.'
+      : '선택한 실패 건의 Excel 새로고침 포함 재실행을 시작했습니다.',
+  };
+}
+
 async function serveStatic(res, requestPath) {
   let filePath;
 
@@ -1658,6 +1847,18 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestPath === '/api/job-runs') {
       sendJson(res, 200, await getJobRuns(url.searchParams.get('limit')));
+      return;
+    }
+
+    const jobRunRerunMatch = requestPath.match(/^\/api\/job-runs\/([^/]+)\/rerun$/);
+    if (req.method === 'POST' && jobRunRerunMatch) {
+      sendJson(res, 200, await startSelectedJobRerun(decodeURIComponent(jobRunRerunMatch[1])));
+      return;
+    }
+
+    const jobRunLogMatch = requestPath.match(/^\/api\/job-runs\/([^/]+)\/log$/);
+    if (req.method === 'GET' && jobRunLogMatch) {
+      sendJson(res, 200, await getJobRunLog(decodeURIComponent(jobRunLogMatch[1])));
       return;
     }
 

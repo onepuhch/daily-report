@@ -2,6 +2,8 @@ param(
     [string]$WorkbookPath,
     [string]$ProjectRoot,
     [int]$LookbackDays = 10,
+    [string]$FromDate,
+    [string]$UntilDate,
     [int]$WaitSeconds = 90,
     [switch]$Visible,
     [switch]$SkipRefresh
@@ -145,8 +147,8 @@ if (-not (Test-Path -LiteralPath $WorkbookPath)) {
 
 $WorkbookPath = (Resolve-Path -LiteralPath $WorkbookPath).Path
 $python = Resolve-Python -Root $root
-$until = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
-$fromDate = (Get-Date).AddDays(-1 * [Math]::Max($LookbackDays, 1)).ToString("yyyy-MM-dd")
+$until = if ($UntilDate) { $UntilDate } else { (Get-Date).AddDays(-1).ToString("yyyy-MM-dd") }
+$fromDate = if ($FromDate) { $FromDate } else { (Get-Date).AddDays(-1 * [Math]::Max($LookbackDays, 1)).ToString("yyyy-MM-dd") }
 
 Write-Host "Daily Market update"
 Write-Host "Project: $root"

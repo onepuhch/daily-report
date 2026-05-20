@@ -39,7 +39,7 @@
           </div>
         </header>
 
-        <section class="summary-strip" aria-label="report summary">
+        <section id="summaryStrip" class="summary-strip" aria-label="report summary">
           <div>
             <span class="summary-label">Date</span>
             <select id="reportSelect" class="report-select" aria-label="리포트 날짜 선택"></select>
@@ -54,7 +54,7 @@
           </div>
         </section>
 
-        <nav class="workspace-tabs" aria-label="admin sections">
+        <nav id="workspaceTabs" class="workspace-tabs" aria-label="admin sections">
           <button id="dataTabButton" class="workspace-tab active" type="button" data-view="data">데이터</button>
           <button id="previewTabButton" class="workspace-tab" type="button" data-view="preview">미리보기</button>
           <button id="commentTabButton" class="workspace-tab" type="button" data-view="comment">코멘트</button>
@@ -214,19 +214,26 @@
               <p class="eyebrow">Operations</p>
               <h3>자동화 로그</h3>
             </div>
-            <button id="reloadJobsButton" class="button secondary" type="button">로그 새로고침</button>
+            <div class="jobs-actions">
+              <button id="rerunSelectedButton" class="button secondary" type="button" disabled>선택 항목 재실행</button>
+              <button id="reloadJobsButton" class="button secondary" type="button">로그 새로고침</button>
+            </div>
           </div>
           <div id="jobsSummary" class="jobs-summary empty-state">최근 실행 내역을 불러오는 중입니다.</div>
+          <div class="jobs-help">
+            실패한 실행만 체크한 뒤 선택 항목 재실행을 누르세요. Excel 새로고침이 필요한지, 업로드만 다시 하면 되는지는 실패 메시지를 기준으로 시스템이 자동 판단합니다.
+          </div>
           <div class="table-wrap">
             <table class="jobs-table">
               <thead>
                 <tr>
+                  <th>선택</th>
                   <th>시작</th>
                   <th>상태</th>
                   <th>기간</th>
                   <th>업로드</th>
                   <th>메시지</th>
-                  <th>로그</th>
+                  <th>로그 파일</th>
                 </tr>
               </thead>
               <tbody id="jobRows"></tbody>
@@ -234,6 +241,22 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="logModal" class="modal-backdrop" hidden>
+      <section class="log-modal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
+        <header class="log-modal-header">
+          <div>
+            <p class="eyebrow">Automation Log</p>
+            <h3 id="logModalTitle">로그</h3>
+            <p id="logModalMeta" class="log-modal-meta"></p>
+          </div>
+          <button id="closeLogModalButton" class="button ghost" type="button" aria-label="로그 닫기">닫기</button>
+        </header>
+        <div id="logModalPath" class="log-modal-path"></div>
+        <section id="logModalSummary" class="log-modal-summary"></section>
+        <pre id="logModalContent" class="log-modal-content">로그를 불러오는 중입니다.</pre>
+      </section>
     </div>
 
     <script src="/admin/app.js"></script>

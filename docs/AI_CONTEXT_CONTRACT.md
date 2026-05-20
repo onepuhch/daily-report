@@ -11,7 +11,7 @@ Daily Report의 AI 기능은 모델 공급자를 바꿀 수 있어야 한다. Qw
 
 ## Metric context
 
-지표 행, 차트, 검증 결과에서 AI 챗봇을 열 때 다음 payload를 넘긴다.
+지표 행, 차트, 검증 결과에서 AI 챗봇을 열 때 다음 payload를 넘긴다. 단, 공개 리포트 MVP에서는 상세 패널을 제거했으므로 `selected_metric`은 `null`일 수 있다.
 
 ```json
 {
@@ -86,7 +86,7 @@ Daily Report의 AI 기능은 모델 공급자를 바꿀 수 있어야 한다. Qw
 
 ## UI implications
 
-- 공개 리포트에서 지표를 클릭하면 데스크탑은 우측 상세 패널, 모바일은 바텀시트를 연다.
-- 상세 패널과 챗봇은 같은 `selected_metric` context를 공유한다.
+- 공개 리포트 MVP에서는 지표 상세 패널을 두지 않는다. 챗봇은 `selected_metric: null`인 상태에서도 현재 날짜의 리포트 코멘트, 검증 결과, 향후 research item을 기반으로 동작해야 한다.
+- 이후 지표 상세/차트 UI를 다시 도입하면, 해당 화면에서만 `selected_metric` context를 채운다.
 - Admin 코멘트 화면은 `research_items`를 사람이 검토할 수 있는 근거 목록으로 먼저 보여주고, 같은 목록을 AI 초안 생성에 전달한다.
 - 자동 발행 모드에서는 AI 답변이나 코멘트 초안에 반드시 `sources`와 생성 로그를 남긴다.

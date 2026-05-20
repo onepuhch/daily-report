@@ -8,7 +8,6 @@ const state = {
   chatMessages: [],    // {role, content} for API
   chatLoading: false,
   sparklines: new Map(),
-  selectedMetric: null,
 };
 
 /* ─── DOM refs ─── */
@@ -30,18 +29,6 @@ const dom = {
   chatClose: document.getElementById('chatClose'),
   chatSuggestions: document.getElementById('chatSuggestions'),
   chatContextLabel: document.getElementById('chatContextLabel'),
-  metricDetailOverlay: document.getElementById('metricDetailOverlay'),
-  metricDetailPanel: document.getElementById('metricDetailPanel'),
-  metricDetailClose: document.getElementById('metricDetailClose'),
-  metricDetailCategory: document.getElementById('metricDetailCategory'),
-  metricDetailTitle: document.getElementById('metricDetailTitle'),
-  metricDetailValue: document.getElementById('metricDetailValue'),
-  metricDetailUnit: document.getElementById('metricDetailUnit'),
-  metricDetailChange1d: document.getElementById('metricDetailChange1d'),
-  metricDetailChangeYtd: document.getElementById('metricDetailChangeYtd'),
-  metricDetailChart: document.getElementById('metricDetailChart'),
-  metricDetailNote: document.getElementById('metricDetailNote'),
-  metricDetailChat: document.getElementById('metricDetailChat'),
 };
 
 /* ─── Utilities ─── */
@@ -71,23 +58,8 @@ function fmtChange(val, unit) {
   return { html: `<span class="change-badge ${cls}">${sign}${fmtNum(n)}${u}</span>`, cls };
 }
 
-function fmtChangeText(val, unit) {
-  if (val === null || val === undefined || val === '') return '—';
-  const n = Number(val);
-  if (!isFinite(n)) return String(val);
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${fmtNum(n)}${unit ? esc(unit) : ''}`;
-}
-
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function trendColor(value) {
-  const n = Number(value);
-  if (n > 0) return cssVar('--up');
-  if (n < 0) return cssVar('--down');
-  return cssVar('--flat');
 }
 
 function buildSvgLine(values, opts = {}) {
@@ -344,7 +316,7 @@ function renderMetricsCard(cat, items) {
           ${items.map(item => {
             const chg1d = fmtChange(item.change_1d, item.change_1d_unit);
             const chgYtd = fmtChange(item.change_ytd, item.change_ytd_unit);
-            return `<tr class="metric-row" tabindex="0" data-metric-key="${esc(item.metric_key)}" title="상세 보기">
+            return `<tr>
               <td><div class="metric-name">${esc(item.metric_name)}</div></td>
               <td><span class="metric-value">${fmtNum(item.value)}</span><span class="metric-unit">${esc(item.unit||'')}</span></td>
               <td>${chg1d.html}</td>
@@ -355,7 +327,6 @@ function renderMetricsCard(cat, items) {
       </table>
     </div>
   `;
-  bindMetricRows(card);
   return card;
 }
 
@@ -379,7 +350,7 @@ function renderFlowsCard(cat, items) {
         const pct = Math.min(100, (Math.abs(v) / maxAbs) * 100);
         const cls = isBuy ? 'buy' : 'sell';
         const sign = v > 0 ? '+' : '';
-        return `<div class="flow-item metric-row" tabindex="0" data-metric-key="${esc(item.metric_key)}" title="상세 보기">
+        return `<div class="flow-item">
           <div class="flow-name">${esc(item.metric_name)}</div>
           <div class="flow-bar-wrap">
             <div class="flow-bar-bg">
@@ -391,83 +362,7 @@ function renderFlowsCard(cat, items) {
       }).join('')}
     </div>
   `;
-  bindMetricRows(card);
   return card;
-}
-
-function bindMetricRows(root) {
-  root.querySelectorAll('[data-metric-key]').forEach(el => {
-    el.addEventListener('click', () => openMetricDetail(el.dataset.metricKey));
-    el.addEventListener('keydown', event => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openMetricDetail(el.dataset.metricKey);
-      }
-    });
-  });
-}
-
-function findObservation(metricKey) {
-  return (state.currentReport?.observations || []).find(item => item.metric_key === metricKey);
-}
-
-function openMetricPanel() {
-  dom.metricDetailOverlay.hidden = false;
-  dom.metricDetailPanel.hidden = false;
-  document.body.classList.add('metric-detail-open');
-}
-
-function closeMetricDetail() {
-  dom.metricDetailOverlay.hidden = true;
-  dom.metricDetailPanel.hidden = true;
-  document.body.classList.remove('metric-detail-open');
-}
-
-async function openMetricDetail(metricKey) {
-  const item = findObservation(metricKey);
-  if (!item) return;
-
-  state.selectedMetric = item;
-  openMetricPanel();
-  renderMetricDetail(item, null);
-
-  try {
-    const series = await fetchJson(`/api/metrics/${encodeURIComponent(metricKey)}/series`);
-    renderMetricDetail(item, series);
-  } catch {
-    renderMetricDetail(item, null);
-  }
-}
-
-function renderMetricDetail(item, series) {
-  dom.metricDetailCategory.textContent = item.category_label || item.category || '지표 상세';
-  dom.metricDetailTitle.textContent = item.metric_name || item.metric_key;
-  dom.metricDetailValue.textContent = fmtNum(item.value);
-  dom.metricDetailUnit.textContent = item.unit || '';
-  dom.metricDetailChange1d.textContent = fmtChangeText(item.change_1d, item.change_1d_unit);
-  dom.metricDetailChangeYtd.textContent = fmtChangeText(item.change_ytd, item.change_ytd_unit);
-  dom.metricDetailChange1d.className = Number(item.change_1d) > 0 ? 'up' : Number(item.change_1d) < 0 ? 'down' : 'flat';
-  dom.metricDetailChangeYtd.className = Number(item.change_ytd) > 0 ? 'up' : Number(item.change_ytd) < 0 ? 'down' : 'flat';
-
-  const comment = state.currentReport?.comment?.final_comment || state.currentReport?.comment?.auto_comment || '';
-  dom.metricDetailNote.textContent = comment
-    ? `오늘 코멘트: ${comment}`
-    : '아직 연결된 코멘트가 없습니다. 이후 AI/RAG 근거가 이 영역에 함께 표시됩니다.';
-
-  const points = (series?.points || []).slice(-20);
-  renderMetricDetailChart(item, points);
-}
-
-function renderMetricDetailChart(item, points) {
-  const values = points.length ? points.map(point => Number(point.value)) : [Number(item.value)];
-  dom.metricDetailChart.innerHTML = buildSvgLine(values, {
-    color: trendColor(item.change_1d),
-    fill: true,
-    dots: true,
-    width: 520,
-    height: 240,
-    pad: 20,
-  });
 }
 
 /* ─── Sparklines ─── */
@@ -539,23 +434,6 @@ dom.chatFab.addEventListener('click', openChat);
 dom.chatToggleNav.addEventListener('click', openChat);
 dom.chatClose.addEventListener('click', closeChat);
 dom.chatOverlay.addEventListener('click', closeChat);
-dom.metricDetailClose.addEventListener('click', closeMetricDetail);
-dom.metricDetailOverlay.addEventListener('click', closeMetricDetail);
-dom.metricDetailChat.addEventListener('click', () => {
-  const item = state.selectedMetric;
-  if (!item) return;
-  closeMetricDetail();
-  openChat();
-  dom.chatContextLabel.textContent = `${item.metric_name} 문맥`;
-  dom.chatInput.value = `${item.metric_name} 오늘 움직임을 설명해줘`;
-  dom.chatInput.dispatchEvent(new Event('input'));
-});
-
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !dom.metricDetailPanel.hidden) {
-    closeMetricDetail();
-  }
-});
 
 /* ─── Suggestion chips ─── */
 dom.chatSuggestions.querySelectorAll('.suggestion-chip').forEach(chip => {
@@ -580,15 +458,12 @@ dom.chatInput.addEventListener('keydown', e => {
 dom.chatSend.addEventListener('click', sendMessage);
 
 async function buildAskPayload(question) {
-  const item = state.selectedMetric;
   let validation = [];
 
   if (state.currentDate) {
     try {
       const validationResult = await fetchJson(`/api/validation/${state.currentDate}`);
-      validation = (validationResult.cross_checks || []).filter(check => (
-        !item || check.metric_key === item.metric_key
-      ));
+      validation = validationResult.cross_checks || [];
     } catch {
       validation = [];
     }
@@ -598,18 +473,7 @@ async function buildAskPayload(question) {
     question,
     report_date: state.currentDate,
     surface: 'public_report',
-    selected_metric: item ? {
-      metric_key: item.metric_key,
-      metric_name: item.metric_name,
-      category: item.category,
-      category_label: item.category_label,
-      value: item.value,
-      unit: item.unit,
-      change_1d: item.change_1d,
-      change_1d_unit: item.change_1d_unit,
-      change_ytd: item.change_ytd,
-      change_ytd_unit: item.change_ytd_unit,
-    } : null,
+    selected_metric: null,
     report_comment: {
       status: state.currentReport?.comment?.status || null,
       final_comment: state.currentReport?.comment?.final_comment || null,
@@ -617,7 +481,7 @@ async function buildAskPayload(question) {
       reference_note: state.currentReport?.comment?.reference_note || null,
     },
     validation,
-    history: item ? (state.history[item.metric_key] || []) : [],
+    history: [],
     research_items: [],
   };
 }

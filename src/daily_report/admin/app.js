@@ -6,6 +6,7 @@ const state = {
   currentView: 'data',
   validationResult: null,
   jobRuns: [],
+  selectedJobRunId: null,
 };
 
 const els = {
@@ -14,6 +15,8 @@ const els = {
   jobRunsMenuButton: document.querySelector('#jobRunsMenuButton'),
   reportTitle: document.querySelector('#reportTitle'),
   refreshButton: document.querySelector('#refreshButton'),
+  summaryStrip: document.querySelector('#summaryStrip'),
+  workspaceTabs: document.querySelector('#workspaceTabs'),
   summaryGenerated: document.querySelector('#summaryGenerated'),
   summaryStatus: document.querySelector('#summaryStatus'),
   categoryTabs: document.querySelector('#categoryTabs'),
@@ -38,8 +41,16 @@ const els = {
   validationRows: document.querySelector('#validationRows'),
   validationMessages: document.querySelector('#validationMessages'),
   reloadJobsButton: document.querySelector('#reloadJobsButton'),
+  rerunSelectedButton: document.querySelector('#rerunSelectedButton'),
   jobsSummary: document.querySelector('#jobsSummary'),
   jobRows: document.querySelector('#jobRows'),
+  logModal: document.querySelector('#logModal'),
+  logModalTitle: document.querySelector('#logModalTitle'),
+  logModalMeta: document.querySelector('#logModalMeta'),
+  logModalPath: document.querySelector('#logModalPath'),
+  logModalSummary: document.querySelector('#logModalSummary'),
+  logModalContent: document.querySelector('#logModalContent'),
+  closeLogModalButton: document.querySelector('#closeLogModalButton'),
 };
 
 function escapeHtml(value) {
@@ -218,6 +229,15 @@ function setView(view) {
   });
   els.dailyReportMenuButton.classList.toggle('active', !isJobs);
   els.jobRunsMenuButton.classList.toggle('active', isJobs);
+  document.body.classList.toggle('jobs-mode', isJobs);
+  els.summaryStrip.hidden = isJobs;
+  els.workspaceTabs.hidden = isJobs;
+
+  if (isJobs) {
+    els.reportTitle.textContent = '자동화 로그';
+  } else if (state.currentReport) {
+    els.reportTitle.textContent = state.currentReport.title || `Daily Report ${state.currentReport.report_date}`;
+  }
 
   if (isJobs) {
     loadJobRuns();
@@ -360,9 +380,86 @@ function formatUploadCounts(job) {
   return `리포트 ${reports} / 지표 ${observations}`;
 }
 
+function isRerunnableJob(job) {
+  return job.status === 'failed' || job.status === 'error';
+}
+
+function renderLogSummary(summary) {
+  if (!summary) {
+    return '<div class="log-summary-card warn"><strong>요약을 생성하지 못했습니다.</strong></div>';
+  }
+  const actions = summary.actions?.length
+    ? `<ol>${summary.actions.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`
+    : '';
+  const details = summary.details?.length
+    ? `<div class="log-summary-details">${summary.details.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>`
+    : '';
+
+  return `
+    <div class="log-summary-card ${escapeHtml(summary.level || 'warn')}">
+      <strong>${escapeHtml(summary.title || '로그 요약')}</strong>
+      <p>${escapeHtml(summary.message || '')}</p>
+      ${details}
+      ${actions ? `<div class="log-summary-actions"><span>다음 조치</span>${actions}</div>` : ''}
+    </div>
+  `;
+}
+
+function openLogModal({
+  title = '로그',
+  meta = '',
+  pathText = '',
+  summary = null,
+  content = '로그를 불러오는 중입니다.',
+} = {}) {
+  els.logModalTitle.textContent = title;
+  els.logModalMeta.textContent = meta;
+  els.logModalPath.textContent = pathText;
+  els.logModalPath.hidden = !pathText;
+  els.logModalSummary.innerHTML = renderLogSummary(summary);
+  els.logModalContent.textContent = content;
+  els.logModal.hidden = false;
+}
+
+function closeLogModal() {
+  els.logModal.hidden = true;
+}
+
+async function viewJobLog(jobId) {
+  openLogModal();
+  try {
+    const data = await fetchJson(`/api/job-runs/${encodeURIComponent(jobId)}/log`);
+    const job = data.job || {};
+    openLogModal({
+      title: `${job.status || '-'} · ${job.job_name || '자동화 실행'}`,
+      meta: `${formatDateTime(job.started_at)} 시작 · ${job.message || '메시지 없음'}`,
+      pathText: job.log_path || '',
+      summary: data.summary,
+      content: data.content || '로그 파일이 비어 있습니다.',
+    });
+  } catch (error) {
+    openLogModal({
+      title: '로그 로드 실패',
+      meta: error.message,
+      summary: {
+        level: 'error',
+        title: '로그 파일을 읽지 못했습니다.',
+        message: '자동화가 다른 컴퓨터에서 실행됐거나, 로컬 로그 파일이 삭제됐을 수 있습니다.',
+        actions: ['자동화가 실행된 컴퓨터에서 Admin을 열어 확인', '자동화 로그의 메시지와 상태를 먼저 확인', '필요하면 같은 날짜로 재실행'],
+        details: [],
+      },
+      content: '로그 파일을 읽지 못했습니다. 자동화가 다른 컴퓨터에서 실행됐거나, 로그 파일이 삭제됐을 수 있습니다.',
+    });
+  }
+}
+
 function renderJobRuns(data) {
   const rows = data.job_runs || [];
   state.jobRuns = rows;
+  if (!rows.some((job) => job.id === state.selectedJobRunId && isRerunnableJob(job))) {
+    state.selectedJobRunId = null;
+  }
+  els.rerunSelectedButton.disabled = !state.selectedJobRunId;
   const latest = rows[0];
 
   if (!rows.length) {
@@ -378,16 +475,47 @@ function renderJobRuns(data) {
     <span>${escapeHtml(formatDateTime(latest.started_at))} 시작 · ${escapeHtml(latest.message || '메시지 없음')}</span>
   `;
 
-  els.jobRows.innerHTML = rows.map((job) => `
-    <tr>
+  els.jobRows.innerHTML = rows.map((job) => {
+    const status = job.status || 'warn';
+    const logPath = job.log_path || '';
+    const rerunnable = isRerunnableJob(job);
+    return `
+    <tr class="job-row ${escapeHtml(status)}">
+      <td class="select-cell">
+        <input
+          type="checkbox"
+          data-select-job="${escapeHtml(job.id)}"
+          ${rerunnable ? '' : 'disabled'}
+          ${job.id === state.selectedJobRunId ? 'checked' : ''}
+          aria-label="${escapeHtml(formatDateTime(job.started_at))} 실행 선택"
+        >
+      </td>
       <td>${escapeHtml(formatDateTime(job.started_at))}</td>
-      <td><span class="status-pill ${escapeHtml(job.status || 'warn')}">${escapeHtml(job.status || '-')}</span></td>
+      <td><span class="status-pill ${escapeHtml(status)}">${escapeHtml(job.status || '-')}</span></td>
       <td>${escapeHtml(formatJobPeriod(job))}</td>
       <td>${escapeHtml(formatUploadCounts(job))}</td>
       <td class="message-cell">${escapeHtml(job.message || '-')}</td>
-      <td>${job.log_path ? `<span class="log-path">${escapeHtml(job.log_path)}</span>` : '-'}</td>
+      <td>${logPath ? `
+        <div class="log-path-wrap">
+          <span class="log-path" title="${escapeHtml(logPath)}">${escapeHtml(logPath)}</span>
+          <button class="button micro" type="button" data-view-log="${escapeHtml(job.id)}">로그 보기</button>
+        </div>
+      ` : '-'}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
+
+  els.jobRows.querySelectorAll('[data-view-log]').forEach((button) => {
+    button.addEventListener('click', () => {
+      viewJobLog(button.dataset.viewLog);
+    });
+  });
+  els.jobRows.querySelectorAll('[data-select-job]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      state.selectedJobRunId = checkbox.checked ? checkbox.dataset.selectJob : null;
+      renderJobRuns({ job_runs: state.jobRuns });
+    });
+  });
 }
 
 async function loadJobRuns() {
@@ -403,6 +531,37 @@ async function loadJobRuns() {
     els.jobRows.innerHTML = '';
   } finally {
     els.reloadJobsButton.disabled = false;
+  }
+}
+
+async function rerunSelectedJob() {
+  const job = state.jobRuns.find((item) => item.id === state.selectedJobRunId);
+  if (!job) return;
+
+  const confirmed = window.confirm(
+    `${formatDateTime(job.started_at)} 실패 건을 다시 실행할까요?\n\n대상 기간: ${formatJobPeriod(job)}\n실패 메시지를 기준으로 Excel 새로고침 필요 여부는 시스템이 자동 판단합니다.`,
+  );
+  if (!confirmed) return;
+
+  els.rerunSelectedButton.disabled = true;
+  els.jobsSummary.className = 'jobs-summary started';
+  els.jobsSummary.innerHTML = '<strong>선택 항목 재실행 요청 중</strong><span>자동화 스크립트를 시작하고 있습니다.</span>';
+
+  try {
+    const result = await fetchJson(`/api/job-runs/${encodeURIComponent(job.id)}/rerun`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    els.jobsSummary.className = 'jobs-summary started';
+    els.jobsSummary.innerHTML = `<strong>선택 항목 재실행 시작</strong><span>${escapeHtml(result.message || '자동화 로그에서 진행 상태를 확인하세요.')}</span>`;
+    state.selectedJobRunId = null;
+    setTimeout(loadJobRuns, 2500);
+  } catch (error) {
+    els.jobsSummary.className = 'jobs-summary error';
+    els.jobsSummary.textContent = `선택 항목 재실행 시작 실패: ${error.message}`;
+  } finally {
+    els.rerunSelectedButton.disabled = !state.selectedJobRunId;
   }
 }
 
@@ -515,7 +674,25 @@ async function runValidation() {
   }
 }
 
-els.refreshButton.addEventListener('click', () => loadReports());
+els.refreshButton.addEventListener('click', () => {
+  if (state.currentView === 'jobs') {
+    loadJobRuns();
+  } else {
+    loadReports();
+  }
+});
+els.closeLogModalButton.addEventListener('click', closeLogModal);
+els.rerunSelectedButton.addEventListener('click', rerunSelectedJob);
+els.logModal.addEventListener('click', (event) => {
+  if (event.target === els.logModal) {
+    closeLogModal();
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !els.logModal.hidden) {
+    closeLogModal();
+  }
+});
 els.reportSelect.addEventListener('change', () => {
   if (els.reportSelect.value) {
     loadReport(els.reportSelect.value);
