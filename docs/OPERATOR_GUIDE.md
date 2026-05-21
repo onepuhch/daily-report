@@ -31,6 +31,15 @@ Market Daily Supabase Upload
 scripts\07_check_pipeline_status.cmd
 ```
 
+## Admin 화면 열기
+
+```text
+scripts\03_start_admin.cmd
+```
+
+이 파일은 로컬 Admin 서버를 켜고 2초 뒤 브라우저에서 `http://127.0.0.1:4173/admin`을 자동으로 엽니다.
+이미 다른 포트를 쓰고 싶으면 실행 전에 `DAILY_REPORT_ADMIN_PORT` 환경변수를 지정합니다.
+
 ## 스케줄 실패 시 수동 복구
 
 Excel 새로고침부터 다시 해야 하면:

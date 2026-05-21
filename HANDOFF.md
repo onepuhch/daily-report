@@ -170,6 +170,9 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
   - 2026-05-20, 2026-05-19, 2026-05-18, 2026-05-15, 2026-05-14 검증 API는 모두 `pass`.
   - 실제 미승인 mismatch가 없어 승인 레코드는 강제로 만들지 않았다.
   - 낮은 위험의 실제 차이가 발생하면 그때 `validation_approvals` 기록을 생성한다.
+- `scripts/03_start_admin.cmd`를 운영자용으로 보강했다.
+  - 더블클릭하면 Admin 서버를 켜고 2초 뒤 `http://127.0.0.1:4173/admin`을 브라우저로 자동 오픈한다.
+  - `DAILY_REPORT_ADMIN_PORT`가 이미 지정되어 있으면 해당 포트를 사용한다.
 - 다음 우선순위는 새 화면 추가가 아니라 실제 운영 dogfooding이다:
   1. 자동화 로그에서 실패 행 → 로그 보기 → 선택 항목 재실행 흐름 확인
   2. 검증 탭에서 실제 운영자가 승인 가능한 mismatch 1건 승인 기록
