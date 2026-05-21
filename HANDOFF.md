@@ -48,7 +48,7 @@ MVP 이후로 미루는 것:
 - `market_observations`: 9,834건
 - `report_comments`: 286건
 - `source_documents`: 194건 (`2025-07-15` ~ `2026-05-18`)
-- Windows 작업 스케줄러 `Market Daily Supabase Upload` 등록 완료, 매일 08:30 실행.
+- Windows 작업 스케줄러 `Market Daily Supabase Upload` 등록 완료, 매일 07:00 실행.
 - 상태 점검은 `scripts/07_check_pipeline_status.cmd`로 확인한다.
 - `job_runs` 테이블 생성 완료. `scripts/Run-DailyMarketUpdate.ps1` 실행 시 `started/success/failed` 로그가 DB에 기록된다.
 - 2026-05-19 08:30 자동 실행은 Excel COM 저장 단계에서 1회 실패했으나, 남은 Excel 프로세스를 종료하고 `Run-DailyMarketUpdate.ps1 -Visible -LookbackDays 10`로 재실행해 성공 처리했다.
@@ -444,7 +444,7 @@ git push
   - `source_documents`: 194건 (`2025-07-15` ~ `2026-05-18`)
 - 자동화 등록:
   - Windows 작업 스케줄러 `Market Daily Supabase Upload`
-  - 매일 08:30 실행
+  - 매일 07:00 실행
   - 실행 스크립트: `scripts/Run-DailyMarketUpdate.ps1`
   - 최근 10일 구간을 재업로드해 누락 보정
 

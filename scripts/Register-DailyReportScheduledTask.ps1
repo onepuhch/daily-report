@@ -1,7 +1,7 @@
 param(
     [string]$TaskName = "Market Daily Supabase Upload",
     [string]$ProjectRoot,
-    [string]$At = "08:30",
+    [string]$At = "07:00",
     [int]$LookbackDays = 10,
     [switch]$VisibleExcel
 )

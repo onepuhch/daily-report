@@ -19,7 +19,7 @@ Market Daily Supabase Upload
 기본 실행 시각:
 
 ```text
-08:30
+07:00
 ```
 
 자동 실행 결과는 Admin의 `자동화 로그`에서 확인합니다.
