@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 echo Checking Excel source coverage...
 echo.
-".venv-docling\Scripts\python.exe" "scripts\check_excel_coverage.py" --format markdown
+powershell -ExecutionPolicy Bypass -File "%~dp0Check-ExcelCoverage.ps1"
 set "EXITCODE=%ERRORLEVEL%"
 echo.
 if not "%EXITCODE%"=="0" (

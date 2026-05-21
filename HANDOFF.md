@@ -744,7 +744,7 @@ Verified:
 
 ### 2026-05-21 — Codex — Excel coverage automation
 
-- Added `scripts\check_excel_coverage.py` and `scripts\10_check_excel_coverage.cmd`.
+- Added `scripts\check_excel_coverage.py`, `scripts\Check-ExcelCoverage.ps1`, and `scripts\10_check_excel_coverage.cmd`.
 - The coverage check reads `MARKET DAILY.xlsm`, builds the active report from the Python metric mapping, and reports mapped/missing metrics plus unmapped source sheets.
 - Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics.
 - Deferred source sheets detected: `선물투자자별순매수금액`, `주식투자자별순매수금액`, `국공채형MMF`, `일반형MMF`.

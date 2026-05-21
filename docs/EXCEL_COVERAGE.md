@@ -49,7 +49,8 @@ Latest API check:
 Latest automated source coverage check:
 
 - Command: `scripts\10_check_excel_coverage.cmd`
-- Script: `scripts\check_excel_coverage.py`
+- Wrapper: `scripts\Check-ExcelCoverage.ps1`
+- Core script: `scripts\check_excel_coverage.py`
 - Result date: `2026-05-20`
 
 Result:
