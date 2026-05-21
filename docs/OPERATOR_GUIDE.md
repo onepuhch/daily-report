@@ -80,7 +80,8 @@ The scheduled and manual recovery pipelines now use this order:
 3. Run pre-upload validation.
    - Local required metrics must be present and numeric.
    - Yahoo Finance cross-check runs before upload.
-   - Strict cross-check mismatches block upload.
+   - Yahoo Finance differences are warning/reference items, not upload blockers.
+   - Missing required metrics or invalid numeric values block upload.
 4. Upload to Supabase only after validation passes.
 5. Run post-upload DB validation.
 6. Record the job result and log path in `job_runs`.
@@ -90,5 +91,13 @@ Manual test command:
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\Run-DailyMarketUpdate.ps1 -SkipRefresh -LookbackDays 2
 ```
+
+Admin selected rerun behavior:
+
+- In Admin → Automation Log, check one failed row and click `선택 항목 재실행`.
+- The server immediately creates a new `job_runs` row with `started` status.
+- The rerun log is written to `data/logs/admin_rerun_*.log`.
+- If PowerShell exits before the script records `success` or `failed`, the Admin server marks the still-started row as `failed` so the operator can see it.
+- The script supports `-RunId` and `-LogPath` for this flow.
 
 ---

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -89,16 +90,40 @@ def request_supabase(base_url: str, api_key: str, path: str) -> tuple[list[dict[
     return response.json() if response.text else [], total
 
 
-def yahoo_latest(symbol: str) -> float | None:
+def yahoo_close_for_date(symbol: str, report_date: str) -> tuple[float | None, str | None]:
+    target = date.fromisoformat(report_date)
+    period_start = int(datetime.combine(target - timedelta(days=7), datetime.min.time(), timezone.utc).timestamp())
+    period_end = int(datetime.combine(target + timedelta(days=2), datetime.min.time(), timezone.utc).timestamp())
     encoded = quote(symbol, safe="")
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded}?range=5d&interval=1d"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded}?period1={period_start}&period2={period_end}&interval=1d"
     response = requests.get(url, timeout=20, headers={"User-Agent": "daily-report-validator/1.0"})
     if response.status_code >= 400:
         raise RuntimeError(f"Yahoo request failed for {symbol}: {response.status_code}")
     result = response.json()["chart"]["result"][0]
+    timestamps = result.get("timestamp") or []
     closes = result["indicators"]["quote"][0]["close"]
-    valid = [float(value) for value in closes if value is not None]
-    return valid[-1] if valid else None
+    candidates: list[tuple[date, float]] = []
+
+    for timestamp, close in zip(timestamps, closes):
+        if close is None:
+            continue
+        close_date = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date()
+        candidates.append((close_date, float(close)))
+
+    if not candidates:
+        return None, None
+
+    for close_date, close in candidates:
+        if close_date == target:
+            return close, close_date.isoformat()
+
+    previous = [(close_date, close) for close_date, close in candidates if close_date <= target]
+    if previous:
+        close_date, close = previous[-1]
+        return close, close_date.isoformat()
+
+    close_date, close = candidates[0]
+    return close, close_date.isoformat()
 
 
 def yahoo_page_url(symbol: str) -> str:
@@ -167,7 +192,7 @@ def main() -> int:
             if not item or not finite_number(item.get("value")):
                 continue
             try:
-                external = yahoo_latest(str(meta["symbol"]))
+                external, external_date = yahoo_close_for_date(str(meta["symbol"]), report_date)
                 if external is None:
                     warnings.append(f"Yahoo value unavailable for {key}.")
                     continue
@@ -182,6 +207,7 @@ def main() -> int:
                         "source": "Yahoo Finance",
                         "symbol": meta["symbol"],
                         "url": yahoo_page_url(str(meta["symbol"])),
+                        "external_date": external_date,
                         "local": local,
                         "external": external,
                         "diff_pct": round(diff_pct, 4),

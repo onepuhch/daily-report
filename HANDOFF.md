@@ -113,6 +113,68 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 ## 한 줄 요약
 현재는 “운영 가능한 일일 발행 MVP” 1단계다. 새 디자인 확장보다 데이터 누락 점검, pre-upload 검증, 승인 UI dogfooding, 자동화 로그를 우선한다.
 
+## 2026-05-21 Codex update
+
+- `docs/ADMIN_MVP_CHECKLIST.md`를 추가했다.
+- Admin 5개 화면(데이터/미리보기/코멘트/검증/자동화 로그)이 MVP에서 해야 할 일을 정의하고, 충족/미충족/보류 항목을 분리했다.
+- 2단계 Admin 운영 MVP로 넘어가기 전 stop condition을 문서화했다.
+- 최신 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`를 실제 dogfooding했다.
+  - 실패 원인: pre-upload 검증 실패로 Supabase 업로드 차단.
+  - 기존 로그 요약은 `Supabase` 문자열 때문에 DB 연결 문제처럼 잘못 분류했다.
+  - `summarizeJobLog()`에서 pre-upload validation 실패를 Supabase 오류보다 먼저 분류하도록 수정했다.
+  - 현재 로그 팝업 요약은 “업로드 전 데이터 검증에서 막혔습니다”로 표시된다.
+- 같은 dogfooding 중 운영 기준 충돌을 확인했다.
+  - 기존 문서 기준: Yahoo Finance 대조는 시차/종가 차이가 있으므로 경고로만 사용.
+  - 기존 실행 기준: `--strict-cross-check` 때문에 Yahoo 차이만으로 pre-upload가 실패하고 업로드가 막힘.
+  - 수정: `Run-DailyMarketUpdate.ps1` pre-upload 단계에서 `--strict-cross-check` 제거.
+  - 현재 기준: 필수 로컬 지표 누락/비정상 숫자는 업로드 차단, Yahoo 차이는 Admin 검증 탭에서 확인할 경고/참고 항목.
+  - 검증: `validate_daily_data.py --skip-db --cross-check` 단독 실행 시 status `pass`, errors `[]` 확인. 현재 Codex 터미널에서는 Yahoo 외부 접속이 권한 문제로 warning 처리됐지만 exit code는 0.
+- Yahoo 검증 기준일 문제를 수정했다.
+  - 기존 `validate_daily_data.py`는 `range=5d` 조회 후 마지막 종가를 사용해서 기준일이 아니라 최신 값으로 비교할 수 있었다.
+  - 수정: report date 주변 기간을 조회하고, `report_date`와 일치하는 Yahoo 종가를 우선 사용한다. 없으면 기준일 이전의 가장 가까운 값을 사용한다.
+  - 검증 결과 payload에 `external_date`를 추가했고, Admin 검증 탭의 Yahoo 값 아래에 `YYYY-MM-DD 기준`을 표시한다.
+  - 2026-05-20 확인 결과 KOSPI/KOSPI200/KOSDAQ/Nikkei 225 모두 `external_date: 2026-05-20`으로 매칭됐다.
+- 2026-05-20 누락 데이터 재업로드 완료.
+  - `Run-DailyMarketUpdate.ps1 -FromDate 2026-05-11 -UntilDate 2026-05-20 -SkipRefresh`를 네트워크 권한 있는 외부 실행으로 돌렸다.
+  - 결과: uploaded_reports 8건, uploaded_observations 280건.
+  - post-upload DB validation: 2026-05-20 status `pass`, errors `[]`.
+  - 새 성공 job id: `bf60c9bd-2260-42eb-8699-7fa7264a4ff3`.
+  - 주의: Codex 샌드박스 안에서 같은 명령을 실행하면 Python `requests`가 Supabase/Yahoo 접속에서 `[WinError 10013]`으로 차단될 수 있다. 이 경우 코드 문제가 아니라 실행 환경 네트워크 권한 문제다.
+- Admin 시장 데이터 탭 표 첫 열에 `No.` 순번을 추가했다.
+  - 전체 탭에서는 마지막 순번으로 전체 지표 수를 확인할 수 있다.
+  - 하단 행 수 문구는 제거했다.
+- Admin 자동화 로그의 `선택 항목 재실행`을 운영자 추적 가능하게 보강했다.
+  - 버튼을 누르는 즉시 새 `job_runs` started 행을 생성한다.
+  - 재실행 로그 파일은 `data/logs/admin_rerun_*.log`로 고정 생성된다.
+  - PowerShell 자식 프로세스 stdout/stderr를 같은 로그 파일에 남긴다.
+  - 프로세스가 최종 상태를 DB에 기록하기 전에 비정상 종료되면, 아직 `started`인 행만 `failed`로 바꿔 운영자 화면에 남긴다.
+  - `Run-DailyMarketUpdate.ps1`은 외부에서 받은 `-RunId`, `-LogPath`를 지원한다.
+  - Dogfooding: 기존 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`에서 Admin 재실행 API를 호출했다.
+    - 새 run id: `f9d2e566-1765-4cc5-a3f5-6b4d91f6ef38`
+    - mode: `upload_only`
+    - 기간: `2026-05-11` ~ `2026-05-20`
+    - 결과: `success`, uploaded_reports 8건, uploaded_observations 280건
+    - 로그 모달 API 요약: `자동화가 정상 완료됐습니다.`
+- D-003 재확인 완료.
+  - `report/index.html`에는 Chart.js/CDN 차트 스크립트가 없다.
+  - `report/app.js` sparkline과 챗봇 차트는 `svg/polyline/rect` 기반이다.
+  - `node --check src/daily_report/report/app.js` 통과.
+- Admin 코멘트 발행 규칙을 MVP 수준으로 명시했다.
+  - `draft`: 임시저장
+  - `reviewed`: 검토 완료
+  - `published`: 발행 상태
+  - `reviewed/published`로 저장할 때 최종 코멘트와 초안 코멘트가 모두 비어 있으면 프론트엔드와 서버에서 저장을 막는다.
+  - API dogfooding: 빈 코멘트로 `published` 저장 요청 시 400 응답 확인.
+  - API dogfooding: 기존 2026-05-14 코멘트를 그대로 `reviewed` 상태로 재저장, 200 응답 및 observation_count 35 확인.
+- 검증 승인 dogfooding 상태:
+  - 2026-05-20, 2026-05-19, 2026-05-18, 2026-05-15, 2026-05-14 검증 API는 모두 `pass`.
+  - 실제 미승인 mismatch가 없어 승인 레코드는 강제로 만들지 않았다.
+  - 낮은 위험의 실제 차이가 발생하면 그때 `validation_approvals` 기록을 생성한다.
+- 다음 우선순위는 새 화면 추가가 아니라 실제 운영 dogfooding이다:
+  1. 자동화 로그에서 실패 행 → 로그 보기 → 선택 항목 재실행 흐름 확인
+  2. 검증 탭에서 실제 운영자가 승인 가능한 mismatch 1건 승인 기록
+  3. 코멘트 저장/상태 변경/미리보기 확인까지 하루 발행 플로우를 한 번 끝까지 실행
+
 ## 지금 바로 할 일
 
 **1단계 — 데이터 적재/검증/발행 MVP 안정화**
@@ -130,9 +192,9 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 4. 엑셀 원본 항목 점검 2차
    - `docs/EXCEL_COVERAGE.md` 기준 mapped metric 누락은 0건.
    - 다음에는 사용자 눈으로 중요 항목이 빠지지 않았는지 확인하고, 의도적 제외 항목은 문서에 사유를 추가한다.
-5. Admin 2단계 진입 체크리스트 작성
-   - 데이터/미리보기/코멘트/검증/자동화 로그 각 화면이 MVP에서 해야 할 일을 1~3줄로 정의한다.
-   - 충족/미충족을 분리하고, 미충족만 2단계 작업으로 넘긴다.
+5. Admin 2단계 진입 체크리스트 확인
+   - `docs/ADMIN_MVP_CHECKLIST.md` 기준으로 5개 화면의 MVP 충족 여부를 본다.
+   - 미충족 항목만 2단계 작업으로 넘기고, 공개 리포트 디자인/시각화 실험은 계속 보류한다.
 6. 공개 리포트 디자인/시각화는 보류
    - 1단계에서는 깨짐 여부만 확인한다.
    - 클릭형 차트, 상세 패널, 디자인 실험은 데이터 적재 MVP 안정화 뒤 별도 사이클로 진행한다.
@@ -156,7 +218,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 | 엑셀 원본 항목 점검 | 1차 완료 | `docs/EXCEL_COVERAGE.md` 생성. 현재 매핑 35개, 최신 JSON 35개, Admin API 35개로 mapped metric 누락 0건. |
 | 검증 gate | 진행 중 | pre-upload 검증과 Yahoo cross-check 작동. 2026-05-18 mismatch 3건 확인. 실제 승인 처리는 값 차이가 커서 보류. |
 | 자동화 로그 | 진행 중 | `job_runs` 기록 작동. 실패 행 강조, Admin 내 로그 보기 팝업과 운영자용 요약/다음 조치 추가. 실패 대응 절차 문서화 완료. |
-| Admin | 진행 중 | 데이터/코멘트/검증/미리보기/자동화 로그 중심으로 MVP 흐름 정리 중. |
+| Admin | 진행 중 | 데이터/코멘트/검증/미리보기/자동화 로그 중심으로 MVP 흐름 정리 중. `docs/ADMIN_MVP_CHECKLIST.md`에 2단계 진입 기준 정리 완료. |
 | 공개 리포트 | 진행 중 | Supabase 기준 HTML 조회 작동. 원본 항목 누락/분류/표기 확인이 우선. |
 | AI/뉴스/챗봇 | 보류 | 계약 문서는 유지하되 1단계 MVP 안정화 후 구현. |
 

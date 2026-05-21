@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -165,6 +166,17 @@ function sqlArray(values) {
 function normalizeStatus(value) {
   const allowed = new Set(['draft', 'reviewed', 'published']);
   return allowed.has(value) ? value : 'reviewed';
+}
+
+function validateCommentForStatus(payload) {
+  const status = normalizeStatus(payload.status);
+  const finalComment = String(payload.final_comment || '').trim();
+  const autoComment = String(payload.auto_comment || '').trim();
+  if ((status === 'reviewed' || status === 'published') && !finalComment && !autoComment) {
+    const error = new Error('reviewed/published status requires a final or draft comment.');
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
 function escapeHtml(value) {
@@ -1341,6 +1353,7 @@ async function saveComment(date, payload) {
     error.statusCode = 400;
     throw error;
   }
+  validateCommentForStatus(payload);
 
   await mkdir(processedDir, { recursive: true });
   await mkdir(outputDir, { recursive: true });
@@ -1633,13 +1646,17 @@ function summarizeJobLog(job, content) {
     };
   }
 
-  if (lower.includes('supabase')) {
+  if (lower.includes('pre-upload data validation failed') || lower.includes('upload was blocked')) {
     return {
-      level: 'error',
-      title: 'Supabase 업로드 또는 조회 단계에서 실패했습니다.',
-      message: 'DB 연결 정보, 네트워크, 테이블 권한 중 하나를 확인해야 합니다.',
-      actions: ['인터넷 연결 확인', '.env의 Supabase URL/key 확인', '잠시 후 같은 날짜로 재실행'],
-      details: [],
+      level: 'warn',
+      title: '업로드 전 데이터 검증에서 막혔습니다.',
+      message: 'DB 연결 문제가 아니라, 업로드 전 필수 검증에서 문제가 발견되어 Supabase 업로드를 중단한 상태입니다.',
+      actions: [
+        'Admin 검증 탭에서 같은 날짜의 차이 항목 확인',
+        '필수 지표 누락 또는 비정상 숫자가 있는지 확인',
+        '문제를 수정한 뒤 같은 날짜로 재실행',
+      ],
+      details: ['실패 위치: 업로드 전 검증', '결과: Supabase 업로드 차단'],
     };
   }
 
@@ -1649,6 +1666,16 @@ function summarizeJobLog(job, content) {
       title: '데이터 검증 단계에서 확인이 필요합니다.',
       message: '엑셀에서 추출한 값과 검증 기준이 맞지 않거나 필수 데이터가 누락됐을 수 있습니다.',
       actions: ['Admin 검증 탭에서 차이 항목 확인', '엑셀 원본 값 확인', '문제가 없으면 운영 기준으로 승인'],
+      details: [],
+    };
+  }
+
+  if (lower.includes('supabase')) {
+    return {
+      level: 'error',
+      title: 'Supabase 업로드 또는 조회 단계에서 실패했습니다.',
+      message: 'DB 연결 정보, 네트워크, 테이블 권한 중 하나를 확인해야 합니다.',
+      actions: ['인터넷 연결 확인', '.env의 Supabase URL/key 확인', '잠시 후 같은 날짜로 재실행'],
       details: [],
     };
   }
@@ -1720,6 +1747,40 @@ function retryModeForJob(job) {
   return 'upload_only';
 }
 
+async function recordJobRunStatus(runId, status, payload = {}) {
+  const now = new Date().toISOString();
+  const row = {
+    id: runId,
+    job_name: 'Market Daily Supabase Upload',
+    status,
+    message: payload.message || null,
+    log_path: payload.log_path || null,
+    report_from: payload.report_from || null,
+    report_until: payload.report_until || null,
+  };
+
+  if (status === 'started') {
+    row.started_at = now;
+  } else {
+    row.finished_at = now;
+  }
+
+  await supabaseRest('POST', 'job_runs?on_conflict=id', [row]);
+}
+
+async function markJobRunFailedIfStillStarted(runId, payload = {}) {
+  await supabaseRest(
+    'PATCH',
+    `job_runs?id=eq.${encodeURIComponent(runId)}&status=eq.started`,
+    {
+      status: 'failed',
+      finished_at: new Date().toISOString(),
+      message: payload.message || 'Admin rerun process exited before recording a final result.',
+      log_path: payload.log_path || null,
+    },
+  );
+}
+
 async function startSelectedJobRerun(id) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     const error = new Error('Invalid job run id.');
@@ -1745,12 +1806,46 @@ async function startSelectedJobRerun(id) {
 
   const mode = retryModeForJob(job);
   const scriptPath = path.join(projectRoot, 'scripts', 'Run-DailyMarketUpdate.ps1');
+  await mkdir(logsDir, { recursive: true });
+  const runId = randomUUID();
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const logPath = path.join(logsDir, `admin_rerun_${timestamp}_${runId.slice(0, 8)}.log`);
+  const startedMessage = mode === 'upload_only'
+    ? 'Admin selected rerun started. Excel refresh is skipped; validation and upload will run.'
+    : 'Admin selected rerun started. Excel refresh is included.';
+
+  await writeFile(
+    logPath,
+    [
+      'Admin selected rerun',
+      `Source job: ${job.id}`,
+      `Mode: ${mode}`,
+      `Period: ${job.report_from || '-'} ~ ${job.report_until || '-'}`,
+      `Started: ${new Date().toISOString()}`,
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  await recordJobRunStatus(runId, 'started', {
+    message: startedMessage,
+    log_path: logPath,
+    report_from: job.report_from,
+    report_until: job.report_until,
+  });
+
   const args = [
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
     '-File',
     scriptPath,
+    '-RunId',
+    runId,
+    '-LogPath',
+    logPath,
+    '-ProjectRoot',
+    projectRoot,
   ];
 
   if (job.report_from) {
@@ -1767,18 +1862,49 @@ async function startSelectedJobRerun(id) {
 
   const child = spawn('powershell.exe', args, {
     cwd: projectRoot,
-    detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  child.unref();
+  const logStream = createWriteStream(logPath, { flags: 'a' });
+  child.stdout.pipe(logStream, { end: false });
+  child.stderr.pipe(logStream, { end: false });
+  child.once('error', async (error) => {
+    logStream.write(`\nAdmin rerun spawn failed: ${error.message}\n`);
+    logStream.end();
+    try {
+      await recordJobRunStatus(runId, 'failed', {
+        message: `Admin rerun spawn failed: ${error.message}`,
+        log_path: logPath,
+        report_from: job.report_from,
+        report_until: job.report_until,
+      });
+    } catch {
+      // The local log file still captures this failure when Supabase is unavailable.
+    }
+  });
+  child.once('close', async (code, signal) => {
+    logStream.write(`\nAdmin rerun process closed. exit_code=${code ?? '-'} signal=${signal || '-'}\n`);
+    logStream.end();
+    if (code && code !== 0) {
+      try {
+        await markJobRunFailedIfStillStarted(runId, {
+          message: `Admin rerun process exited with code ${code}. Open the log for details.`,
+          log_path: logPath,
+        });
+      } catch {
+        // The child process log remains the source of truth if Supabase is unavailable.
+      }
+    }
+  });
 
   return {
     started: true,
+    run_id: runId,
     source_job_id: job.id,
     mode,
     report_from: job.report_from,
     report_until: job.report_until,
+    log_path: logPath,
     message: mode === 'upload_only'
       ? '선택한 실패 건의 데이터 검증/DB 업로드 재실행을 시작했습니다.'
       : '선택한 실패 건의 Excel 새로고침 포함 재실행을 시작했습니다.',

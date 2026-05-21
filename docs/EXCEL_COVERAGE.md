@@ -1,6 +1,6 @@
 # Excel Coverage
 
-Last checked: 2026-05-20
+Last checked: 2026-05-21
 
 ## Scope
 
@@ -40,11 +40,11 @@ Important implementation note:
 
 Latest local processed file:
 
-- `data/processed/market_daily_2026-05-18.json`
+- `data/processed/market_daily_2026-05-20.json`
 
 Latest API check:
 
-- `/api/reports/2026-05-18`
+- `/api/reports/2026-05-20`
 
 Result:
 

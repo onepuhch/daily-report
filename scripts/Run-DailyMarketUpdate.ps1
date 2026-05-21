@@ -6,7 +6,9 @@ param(
     [string]$UntilDate,
     [int]$WaitSeconds = 90,
     [switch]$Visible,
-    [switch]$SkipRefresh
+    [switch]$SkipRefresh,
+    [string]$RunId,
+    [string]$LogPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -113,12 +115,16 @@ if ($envValues.Count -eq 0) {
 }
 $logDir = Join-Path $root "data\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$logPath = Join-Path $logDir ("daily_update_{0}.log" -f (Get-Date).ToString("yyyyMMdd_HHmmss"))
-$runId = [guid]::NewGuid().ToString()
+if (-not $LogPath) {
+    $LogPath = Join-Path $logDir ("daily_update_{0}.log" -f (Get-Date).ToString("yyyyMMdd_HHmmss"))
+}
+if (-not $RunId) {
+    $RunId = [guid]::NewGuid().ToString()
+}
 try {
-    Start-Transcript -Path $logPath -Append | Out-Null
+    Start-Transcript -Path $LogPath -Append | Out-Null
     $transcriptStarted = $true
-    Write-Host "Log: $logPath"
+    Write-Host "Log: $LogPath"
 }
 catch {
     Write-Host "Could not start transcript: $($_.Exception.Message)"
@@ -154,17 +160,17 @@ Write-Host "Daily Market update"
 Write-Host "Project: $root"
 Write-Host "Workbook: $WorkbookPath"
 Write-Host "Date window: $fromDate ~ $until"
-Write-Host "Run id: $runId"
+Write-Host "Run id: $RunId"
 Write-Host ""
 
 Record-JobRun `
     -Python $python `
     -Status "started" `
-    -RunId $runId `
+    -RunId $RunId `
     -FromDate $fromDate `
     -UntilDate $until `
     -Message "Daily update started." `
-    -LogPath $logPath
+    -LogPath $LogPath
 
 if (-not $SkipRefresh) {
     Write-Host "[1/4] Refreshing workbook..."
@@ -183,11 +189,11 @@ if (-not $SkipRefresh) {
         Record-JobRun `
             -Python $python `
             -Status "failed" `
-            -RunId $runId `
+            -RunId $RunId `
             -FromDate $fromDate `
             -UntilDate $until `
             -Message "Workbook refresh failed with exit code $LASTEXITCODE." `
-            -LogPath $logPath
+            -LogPath $LogPath
         exit $LASTEXITCODE
     }
 }
@@ -212,11 +218,11 @@ if ($extractExitCode -ne 0) {
     Record-JobRun `
         -Python $python `
         -Status "failed" `
-        -RunId $runId `
+        -RunId $RunId `
         -FromDate $fromDate `
         -UntilDate $until `
         -Message "JSON extraction failed with exit code $extractExitCode. Upload was not attempted." `
-        -LogPath $logPath
+        -LogPath $LogPath
     exit $extractExitCode
 }
 
@@ -240,11 +246,11 @@ if ($generatedReportCount -le 0 -or -not $generatedUntil) {
     Record-JobRun `
         -Python $python `
         -Status "failed" `
-        -RunId $runId `
+        -RunId $RunId `
         -FromDate $fromDate `
         -UntilDate $until `
         -Message "No report JSON was generated. Upload was not attempted." `
-        -LogPath $logPath
+        -LogPath $LogPath
     exit 1
 }
 
@@ -255,8 +261,7 @@ $preValidationOutput = & $python `
     --project-root $root `
     --report-date $generatedUntil `
     --skip-db `
-    --cross-check `
-    --strict-cross-check 2>&1
+    --cross-check 2>&1
 $preValidationExitCode = $LASTEXITCODE
 $preValidationOutput | ForEach-Object { Write-Host $_ }
 
@@ -264,11 +269,11 @@ if ($preValidationExitCode -ne 0) {
     Record-JobRun `
         -Python $python `
         -Status "failed" `
-        -RunId $runId `
+        -RunId $RunId `
         -FromDate $fromDate `
         -UntilDate $generatedUntil `
         -Message "Pre-upload data validation failed with exit code $preValidationExitCode. Upload was blocked." `
-        -LogPath $logPath
+        -LogPath $LogPath
     exit $preValidationExitCode
 }
 
@@ -287,11 +292,11 @@ if ($importExitCode -ne 0) {
     Record-JobRun `
         -Python $python `
         -Status "failed" `
-        -RunId $runId `
+        -RunId $RunId `
         -FromDate $fromDate `
         -UntilDate $generatedUntil `
         -Message "Supabase import failed with exit code $importExitCode." `
-        -LogPath $logPath
+        -LogPath $LogPath
     exit $importExitCode
 }
 
@@ -324,26 +329,26 @@ if ($validationExitCode -ne 0) {
     Record-JobRun `
         -Python $python `
         -Status "failed" `
-        -RunId $runId `
+        -RunId $RunId `
         -FromDate $fromDate `
         -UntilDate $until `
         -UploadedReports $uploadedReports `
         -UploadedObservations $uploadedObservations `
         -Message "Data validation failed with exit code $validationExitCode." `
-        -LogPath $logPath
+        -LogPath $LogPath
     exit $validationExitCode
 }
 
 Record-JobRun `
     -Python $python `
     -Status "success" `
-    -RunId $runId `
+    -RunId $RunId `
     -FromDate $fromDate `
     -UntilDate $until `
     -UploadedReports $uploadedReports `
     -UploadedObservations $uploadedObservations `
     -Message "Daily update complete." `
-    -LogPath $logPath
+    -LogPath $LogPath
 
 Write-Host ""
 Write-Host "Daily Market update complete."
@@ -355,11 +360,11 @@ catch {
         Record-JobRun `
             -Python $python `
             -Status "failed" `
-            -RunId $runId `
+            -RunId $RunId `
             -FromDate $fromDate `
             -UntilDate $until `
             -Message $message `
-            -LogPath $logPath
+            -LogPath $LogPath
     }
     throw
 }

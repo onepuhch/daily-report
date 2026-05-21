@@ -161,12 +161,13 @@ function renderMetrics() {
     .filter((item) => state.currentCategory === 'all' || item.category === state.currentCategory);
 
   if (rows.length === 0) {
-    els.metricRows.innerHTML = '<tr><td colspan="4" class="empty-state">표시할 데이터가 없습니다.</td></tr>';
+    els.metricRows.innerHTML = '<tr><td colspan="5" class="empty-state">표시할 데이터가 없습니다.</td></tr>';
     return;
   }
 
-  els.metricRows.innerHTML = rows.map((item) => `
+  els.metricRows.innerHTML = rows.map((item, index) => `
     <tr>
+      <td class="row-number">${index + 1}</td>
       <td>
         <div class="metric-name">
           <strong>${escapeHtml(item.metric_name)}</strong>
@@ -306,7 +307,7 @@ function renderValidation(result) {
         <td>${escapeHtml(item.name || item.metric_key)}</td>
         <td>${escapeHtml(item.symbol || '-')}</td>
         <td class="value-cell">${formatNumber(item.local)}</td>
-        <td class="value-cell">${formatNumber(item.external)}</td>
+        <td class="value-cell">${renderExternalValue(item)}</td>
         <td>${renderValidationStatus(item)}</td>
         <td>${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">Yahoo</a>` : '-'}</td>
         <td>${renderApprovalAction(item)}</td>
@@ -319,6 +320,17 @@ function renderValidation(result) {
   }
 
   renderValidationMessages(result);
+}
+
+function renderExternalValue(item) {
+  const value = formatNumber(item.external);
+  if (!item.external_date) return value;
+  return `
+    <div class="value-with-note">
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(item.external_date)} 기준</span>
+    </div>
+  `;
 }
 
 function renderValidationStatus(item) {
@@ -596,6 +608,14 @@ function getCommentPayload() {
   };
 }
 
+function validateCommentPayload(payload) {
+  const hasComment = Boolean(payload.final_comment || payload.auto_comment);
+  if ((payload.status === 'reviewed' || payload.status === 'published') && !hasComment) {
+    return 'reviewed/published 상태로 저장하려면 최종 코멘트 또는 초안 코멘트가 필요합니다.';
+  }
+  return '';
+}
+
 async function generateDraft() {
   if (!state.currentDate) return;
 
@@ -631,10 +651,16 @@ async function uploadToSupabase() {
   els.saveMessage.className = 'save-message';
 
   try {
+    const payload = getCommentPayload();
+    const validationError = validateCommentPayload(payload);
+    if (validationError) {
+      throw new Error(validationError);
+    }
+
     const result = await fetchJson(`/api/supabase/reports/${state.currentDate}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(getCommentPayload()),
+      body: JSON.stringify(payload),
     });
 
     state.currentReport.comment = result.comment;
