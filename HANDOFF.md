@@ -734,3 +734,10 @@ Verified:
 - Kept metric names left-aligned and constrained the data table column widths to reduce the visual gap between `지표` and `값`.
 - Changed the automation log modal so the operator-facing summary and next actions are shown first, while raw logs are hidden behind `원문 로그 보기`.
 - Updated `docs/ADMIN_MVP_CHECKLIST.md` to mark collapsed raw logs as part of the MVP automation-log behavior.
+
+### 2026-05-21 — Codex — Pipeline status check
+
+- `scripts\Check-DailyPipelineStatus.ps1` shows the Windows scheduled task last run at `2026-05-21 08:30:01` with result code `1`.
+- Admin/Supabase `job_runs` latest row is `success` (`f9d2e566-1765-4cc5-a3f5-6b4d91f6ef38`), so the failed scheduled run was recovered by Admin rerun.
+- Latest Supabase report date is `2026-05-20`, with 288 reports, 9,904 observations, and 288 comment rows.
+- `scripts\09_validate_daily_data.cmd` passed for `2026-05-20`: 35 observations, Supabase rows present, and all configured Yahoo Finance cross-checks passed.
