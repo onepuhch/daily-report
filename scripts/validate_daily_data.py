@@ -170,29 +170,34 @@ def main() -> int:
     if args.skip_db:
         warnings.append("Supabase DB validation skipped for pre-upload validation.")
     elif base_url and api_key:
-        report_rows, report_total = request_supabase(
-            base_url,
-            api_key,
-            f"reports?select=id,report_date,status&report_date=eq.{report_date}",
-        )
-        if not report_rows:
-            errors.append(f"Supabase report row missing for {report_date}.")
-        else:
-            report_id = report_rows[0]["id"]
-            _, observation_total = request_supabase(
+        try:
+            report_rows, report_total = request_supabase(
                 base_url,
                 api_key,
-                f"market_observations?select=id&report_id=eq.{report_id}",
+                f"reports?select=id,report_date,status&report_date=eq.{report_date}",
             )
-            if observation_total != len(metrics):
-                errors.append(f"Supabase observation count mismatch: db={observation_total}, json={len(metrics)}.")
-            comment_rows, _ = request_supabase(
-                base_url,
-                api_key,
-                f"report_comments?select=id&report_id=eq.{report_id}",
-            )
-            if not comment_rows:
-                errors.append(f"Supabase report_comments row missing for {report_date}.")
+            if not report_rows:
+                errors.append(f"Supabase report row missing for {report_date}.")
+            else:
+                report_id = report_rows[0]["id"]
+                _, observation_total = request_supabase(
+                    base_url,
+                    api_key,
+                    f"market_observations?select=id&report_id=eq.{report_id}",
+                )
+                if observation_total != len(metrics):
+                    errors.append(f"Supabase observation count mismatch: db={observation_total}, json={len(metrics)}.")
+                comment_rows, _ = request_supabase(
+                    base_url,
+                    api_key,
+                    f"report_comments?select=id&report_id=eq.{report_id}",
+                )
+                if not comment_rows:
+                    errors.append(f"Supabase report_comments row missing for {report_date}.")
+        except requests.RequestException as exc:
+            errors.append(f"Supabase validation unavailable: network request failed ({exc.__class__.__name__}).")
+        except RuntimeError as exc:
+            errors.append(f"Supabase validation unavailable: {exc}")
     else:
         warnings.append("Supabase config missing; skipped DB validation.")
 

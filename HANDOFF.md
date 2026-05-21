@@ -755,3 +755,9 @@ Verified:
 - `scripts\validate_daily_data.py` now imports the active metric mapping and fails if any mapped metric is missing from the generated JSON.
 - This replaces the earlier weak count check (`at least 30`) with the current MVP requirement: all 35 mapped metrics must be present.
 - `scripts\09_validate_daily_data.cmd` passed after the change for `2026-05-20`.
+
+### 2026-05-21 — Codex — Operator status command hardened
+
+- `scripts\check_supabase_status.py` now catches Supabase/network failures and prints a short JSON error with `next_actions` instead of a Python stack trace.
+- `scripts\Check-DailyPipelineStatus.ps1` formats log timestamps as `yyyy-MM-dd HH:mm:ss` to avoid locale/codepage corruption in cmd output.
+- `scripts\07_check_pipeline_status.cmd`, `scripts\09_validate_daily_data.cmd`, and `scripts\10_check_excel_coverage.cmd` now set UTF-8 codepage before running.

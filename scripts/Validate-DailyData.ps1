@@ -103,8 +103,13 @@ if ($result.errors -and $result.errors.Count -gt 0) {
 
 if ($result.warnings -and $result.warnings.Count -gt 0) {
     Write-Host "Warnings"
-    foreach ($item in $result.warnings) {
+    $externalSkipped = @($result.warnings | Where-Object { $_ -like "External check skipped for *" })
+    $otherWarnings = @($result.warnings | Where-Object { $_ -notlike "External check skipped for *" })
+    foreach ($item in $otherWarnings) {
         Write-Host "- $item"
+    }
+    if ($externalSkipped.Count -gt 0) {
+        Write-Host "- External checks skipped: $($externalSkipped.Count). Check internet/security policy if Yahoo cross-check is required."
     }
     Write-Host ""
 }

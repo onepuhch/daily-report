@@ -44,14 +44,14 @@ if ($task) {
     [pscustomobject]@{
         TaskName = $task.TaskName
         State = $task.State
-        LastRunTime = $info.LastRunTime
+        LastRunTime = if ($info.LastRunTime) { $info.LastRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
         LastTaskResult = $info.LastTaskResult
-        NextRunTime = $info.NextRunTime
+        NextRunTime = if ($info.NextRunTime) { $info.NextRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
         MissedRuns = $info.NumberOfMissedRuns
     } | Format-List
 }
 else {
-    Write-Host "Scheduled task not registered."
+    Write-Host "Scheduled task not registered or not visible for the current Windows user."
 }
 
 Write-Host "[Recent logs]"
@@ -59,7 +59,7 @@ $logDir = Join-Path $ProjectRoot "data\logs"
 if (Test-Path -LiteralPath $logDir) {
     Get-ChildItem -LiteralPath $logDir -Filter "daily_update_*.log" |
         Sort-Object LastWriteTime -Descending |
-        Select-Object -First 5 Name, LastWriteTime, Length |
+        Select-Object -First 5 Name, @{Name = "LastWriteTime"; Expression = { $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") } }, Length |
         Format-Table -AutoSize
 }
 else {
@@ -70,3 +70,7 @@ Write-Host ""
 Write-Host "[Supabase]"
 $python = Resolve-Python -Root $ProjectRoot
 & $python (Join-Path $PSScriptRoot "check_supabase_status.py")
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "Supabase status check did not complete. Review the message above, then check Admin > Automation Log if the local Admin server is running."
+}
