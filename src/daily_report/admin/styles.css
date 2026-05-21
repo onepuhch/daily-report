@@ -481,22 +481,23 @@ table {
 
 .data-table {
   table-layout: fixed;
+  width: min(100%, 900px);
 }
 
 .data-col-number {
-  width: 52px;
+  width: 68px;
 }
 
 .data-col-metric {
-  width: auto;
+  width: 220px;
 }
 
 .data-col-value {
-  width: 22%;
+  width: 160px;
 }
 
 .data-col-change {
-  width: 18%;
+  width: 150px;
 }
 
 th,
@@ -523,12 +524,19 @@ td:first-child {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: center;
-  width: 52px;
+  width: 68px;
 }
 
 .data-table th:first-child,
 .data-table td:first-child {
   text-align: center;
+}
+
+.data-table th:nth-child(2),
+.data-table td.metric-cell {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+  text-align: left;
 }
 
 .validation-table th:last-child,
@@ -1013,7 +1021,7 @@ body.jobs-mode #workspaceTabs {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto;
   max-height: min(760px, calc(100vh - 48px));
   max-width: 1080px;
   overflow: hidden;
@@ -1125,6 +1133,21 @@ body.jobs-mode #workspaceTabs {
   line-height: 1.55;
   margin: 0;
   padding-left: 20px;
+}
+
+.log-raw {
+  border-top: 1px solid var(--border);
+  max-height: 360px;
+  overflow: auto;
+}
+
+.log-raw summary {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 11px 20px;
 }
 
 .log-modal-content {

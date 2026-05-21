@@ -727,3 +727,10 @@ Verified:
   - `/api/job-runs/{latest_success_id}/rerun`: 400 because only failed/error runs can be retried
   - `/api/job-runs/{latest_id}/log`: 200, summary `자동화가 정상 완료됐습니다.`
   - `/api/job-runs/{failed_id}/log`: 200, summary `Excel이 응답하지 않아 자동화가 실패했습니다.`
+
+### 2026-05-21 — Codex — Admin operation polish
+
+- Adjusted the Admin data table so the `No.` column remains available while the metric column no longer consumes the full remaining width.
+- Kept metric names left-aligned and constrained the data table column widths to reduce the visual gap between `지표` and `값`.
+- Changed the automation log modal so the operator-facing summary and next actions are shown first, while raw logs are hidden behind `원문 로그 보기`.
+- Updated `docs/ADMIN_MVP_CHECKLIST.md` to mark collapsed raw logs as part of the MVP automation-log behavior.

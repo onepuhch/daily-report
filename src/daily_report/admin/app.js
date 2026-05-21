@@ -168,7 +168,7 @@ function renderMetrics() {
   els.metricRows.innerHTML = rows.map((item, index) => `
     <tr>
       <td class="row-number">${index + 1}</td>
-      <td>
+      <td class="metric-cell">
         <div class="metric-name">
           <strong>${escapeHtml(item.metric_name)}</strong>
           <span>${escapeHtml(item.category_label || item.category)}</span>

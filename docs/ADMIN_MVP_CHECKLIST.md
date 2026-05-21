@@ -21,7 +21,7 @@ MVP target:
 | Preview | Show the generated public HTML report for the selected date before the operator publishes or shares it. | Met for MVP. Preview iframe and open link are available. | Only check for broken rendering in phase 1. Detailed report redesign and click-to-chart interactions are deferred. |
 | Comment | Let the operator review AI/auto draft text, reference notes, final comment, and publication status. | Met for MVP. Manual editing, status save flow, status help text, empty-comment guard for `reviewed/published`, and one unchanged `reviewed` save dogfood are complete. | AI drafting remains deferred. |
 | Validation | Compare DB values with available external references and show whether differences exist without forcing an arbitrary tolerance rule. | Mostly met. Yahoo link, DB value, Yahoo value, result, and approval action are visible. Approval history table integration exists. | Dogfood one real low-risk approval after the operator confirms the DB/Infomax value is correct. DB overwrite remains out of scope. |
-| Automation Log | Let a non-developer know whether the daily automation succeeded, see a readable failure summary, and rerun a failed row. | Met for MVP. Job rows, failure highlighting, log modal, operator summary, and selected failed-row rerun are implemented and dogfooded against a real failed row. | If raw logs are still confusing in real operation, keep raw log collapsed or secondary in phase 2. |
+| Automation Log | Let a non-developer know whether the daily automation succeeded, see a readable failure summary, and rerun a failed row. | Met for MVP. Job rows, failure highlighting, log modal, operator summary, selected failed-row rerun, and collapsed raw logs are implemented and dogfooded against a real failed row. | Improve wording only if real operation shows the summary/action text is confusing. |
 
 ## Phase 1 Stop Conditions
 
@@ -41,7 +41,6 @@ Only these gaps should move into Admin operations MVP work:
 
 - Adjust comment workflow wording only if real operation shows it is confusing.
 - Improve validation approval UX after real use, not before.
-- Decide whether automation raw logs should be collapsed by default.
 - Add an operations summary card only if daily use shows the table alone is not enough.
 - Add AI draft generation only after the manual comment workflow is stable.
 
