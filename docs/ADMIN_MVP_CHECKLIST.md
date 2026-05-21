@@ -23,6 +23,11 @@ MVP target:
 | Validation | Compare DB values with available external references and show whether differences exist without forcing an arbitrary tolerance rule. | Mostly met. Yahoo link, DB value, Yahoo value, result, and approval action are visible. Approval history table integration exists. | Dogfood one real low-risk approval after the operator confirms the DB/Infomax value is correct. DB overwrite remains out of scope. |
 | Automation Log | Let a non-developer know whether the daily automation succeeded, see a readable failure summary, and rerun a failed row. | Met for MVP. Job rows, failure highlighting, log modal, operator summary, selected failed-row rerun, and collapsed raw logs are implemented and dogfooded against a real failed row. | Improve wording only if real operation shows the summary/action text is confusing. |
 
+Data coverage note:
+
+- `scripts\check_excel_coverage.py` confirms 35 mapped metrics and 0 missing mapped metrics for `2026-05-20`.
+- Investor-flow and MMF workbook sheets are detected but classified as deferred scope, not current daily-report MVP omissions.
+
 ## Phase 1 Stop Conditions
 
 Phase 1 can be treated as complete when all of the following are true:

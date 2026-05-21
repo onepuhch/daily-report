@@ -46,6 +46,12 @@ Latest API check:
 
 - `/api/reports/2026-05-20`
 
+Latest automated source coverage check:
+
+- Command: `scripts\10_check_excel_coverage.cmd`
+- Script: `scripts\check_excel_coverage.py`
+- Result date: `2026-05-20`
+
 Result:
 
 - Expected mapped metrics: 35
@@ -101,6 +107,15 @@ These columns exist in the underlying source sheets but are not currently part o
 |---|---|---|---|
 | `국내금리` | 통안증권 1/2/3년, 특수채 AAA 1/2/3/5/10년, 은행채 AAA 3개월/1/2/3/5/10년, 회사채 AA0 1/2/5년, 기타금융채 AA- 계열, 사모 회사채 계열 | intended_exclusion | Current report uses a smaller benchmark set. Add only if the visible `MARKET DAILY` sheet requires them. |
 | `크레딧SP` | 국고 2년, 회사채 AA0 2년 component columns | intended_exclusion | The current report uses the calculated spread column. 국고 2년 is already mapped from `국내금리`. |
+
+Additional deferred source sheets detected by `scripts\check_excel_coverage.py`:
+
+| Sheet | Excluded columns | Classification | Reason |
+|---|---|---|---|
+| `선물투자자별순매수금액` | B:J | investor_flow_deferred | Investor-flow data exists in the workbook but is not part of the current 35-metric daily report MVP. |
+| `주식투자자별순매수금액` | B:G | investor_flow_deferred | Investor-flow data exists in the workbook but is not part of the current 35-metric daily report MVP. |
+| `국공채형MMF` | B:K | mmf_deferred | MMF data exists in the workbook but is not part of the current 35-metric daily report MVP. |
+| `일반형MMF` | B:G | mmf_deferred | MMF data exists in the workbook but is not part of the current 35-metric daily report MVP. |
 
 No mapped metric is currently missing from the latest local JSON or Admin API response.
 

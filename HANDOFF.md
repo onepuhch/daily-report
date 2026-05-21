@@ -741,3 +741,11 @@ Verified:
 - Admin/Supabase `job_runs` latest row is `success` (`f9d2e566-1765-4cc5-a3f5-6b4d91f6ef38`), so the failed scheduled run was recovered by Admin rerun.
 - Latest Supabase report date is `2026-05-20`, with 288 reports, 9,904 observations, and 288 comment rows.
 - `scripts\09_validate_daily_data.cmd` passed for `2026-05-20`: 35 observations, Supabase rows present, and all configured Yahoo Finance cross-checks passed.
+
+### 2026-05-21 — Codex — Excel coverage automation
+
+- Added `scripts\check_excel_coverage.py` and `scripts\10_check_excel_coverage.cmd`.
+- The coverage check reads `MARKET DAILY.xlsm`, builds the active report from the Python metric mapping, and reports mapped/missing metrics plus unmapped source sheets.
+- Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics.
+- Deferred source sheets detected: `선물투자자별순매수금액`, `주식투자자별순매수금액`, `국공채형MMF`, `일반형MMF`.
+- Updated `docs\EXCEL_COVERAGE.md` and `docs\ADMIN_MVP_CHECKLIST.md` with the automated coverage result.
