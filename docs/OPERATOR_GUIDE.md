@@ -1,21 +1,12 @@
-# Daily Report 운영 가이드
+# Daily Report Operator Guide
 
-## 다른 PC에서 준비할 것
+이 문서는 개발자가 아닌 운영자가 DAILY REPORT 자동화를 실행하거나 문제를 확인할 때 쓰는 최소 절차입니다.
 
-1. 이 프로젝트 폴더를 복사한다.
-2. Python, Node.js, Excel, 인포맥스 Excel add-in이 설치되어 있어야 한다.
-3. 프로젝트 루트 또는 상위 `project` 폴더에 `.env`를 둔다.
-4. `.env`의 `INFOMAX_EXCEL_PATH`를 해당 PC의 `MARKET DAILY.xlsm` 실제 경로로 맞춘다.
-5. Supabase 값은 운영 프로젝트 값을 사용한다.
+## 기본 경로
 
-필수 `.env` 값:
-
-```text
-SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
-INFOMAX_EXCEL_PATH=C:\...\MARKET DAILY.xlsm
-DAILY_REPORT_ADMIN_PORT=4173
-```
+- 프로젝트: `C:\Users\infomax\Desktop\Market Daily\project\daily-report`
+- 엑셀 원본: `C:\Users\infomax\Desktop\Market Daily\MARKET DAILY.xlsm`
+- Admin: `http://127.0.0.1:4173/admin`
 
 ## 매일 자동 실행
 
@@ -25,88 +16,96 @@ Windows 작업 스케줄러 작업명:
 Market Daily Supabase Upload
 ```
 
-상태 확인:
+기본 실행 시각:
 
 ```text
-scripts\07_check_pipeline_status.cmd
+08:30
 ```
 
-## Admin 화면 열기
+자동 실행 결과는 Admin의 `자동화 로그`에서 확인합니다.
+
+## Admin 열기
 
 ```text
 scripts\03_start_admin.cmd
 ```
 
-이 파일은 로컬 Admin 서버를 켜고 2초 뒤 브라우저에서 `http://127.0.0.1:4173/admin`을 자동으로 엽니다.
-이미 다른 포트를 쓰고 싶으면 실행 전에 `DAILY_REPORT_ADMIN_PORT` 환경변수를 지정합니다.
-
-## 스케줄 실패 시 수동 복구
-
-Excel 새로고침부터 다시 해야 하면:
+실행하면 로컬 Admin 서버가 켜지고 브라우저가 자동으로 열립니다. 자동으로 열리지 않으면 아래 주소를 직접 엽니다.
 
 ```text
-scripts\08_manual_reupload.cmd
+http://127.0.0.1:4173/admin
 ```
 
-Excel이 이미 갱신되고 저장되어 DB 업로드만 다시 하면:
+## 상태 점검
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\Run-ManualReupload.ps1 -SkipRefresh
+```text
+scripts\07_check_pipeline_status.cmd
 ```
 
-수동 복구 파일은 실패 시 최근 로그와 마지막 오류를 화면에 출력한다. 실패 화면은 닫지 말고 소유자에게 전달한다.
+확인 내용:
+
+- 작업 스케줄러 등록/최근 실행 상태
+- 최근 자동화 로그 파일
+- Supabase 최신 데이터 상태
+
+Supabase 접속이 막히면 Python 오류 전체 대신 짧은 JSON 오류와 `next_actions`가 표시됩니다.
 
 ## 데이터 검증
-
-최신 리포트 검증:
 
 ```text
 scripts\09_validate_daily_data.cmd
 ```
 
-검증 내용:
+확인 내용:
 
-- 핵심 지표 존재 여부
-- 핵심 지표 값이 숫자인지
+- 최신 리포트 지표 35개 존재 여부
 - Supabase `reports`, `market_observations`, `report_comments` 반영 여부
-- KOSPI, USD/KRW, WTI, US 10Y의 Yahoo Finance 값과 경고 수준 비교
+- Yahoo Finance로 확인 가능한 지표의 참고 대조
 
-외부 데이터 비교는 시차와 종가 기준 차이가 있으므로 기본적으로 경고로 본다. 자동 발행 차단 조건으로 쓰려면 별도 엄격 모드와 허용 오차를 정해야 한다.
+중요:
+
+- Yahoo Finance 차이는 참고 경고입니다.
+- Supabase 업로드 차단 기준은 엑셀/JSON의 필수 데이터 누락 또는 DB 반영 실패입니다.
+- 외부 인터넷이 막히면 Yahoo 대조는 건수로 묶여 경고 표시됩니다.
+
+## 엑셀 항목 커버리지 점검
+
+```text
+scripts\10_check_excel_coverage.cmd
+```
+
+확인 내용:
+
+- 현재 엑셀 원본에서 매핑된 35개 지표가 모두 추출되는지
+- Python 매핑과 PowerShell 매핑이 서로 다른지
+- 투자자별 순매수/MMF처럼 현재 MVP에서 제외된 원천 시트가 무엇인지
+
+## 실패 건 재실행
+
+가장 쉬운 방법:
+
+1. Admin을 엽니다.
+2. 왼쪽 메뉴에서 `자동화 로그`를 누릅니다.
+3. 실패 행의 체크박스를 선택합니다.
+4. `선택 항목 재실행`을 누릅니다.
+5. 몇 분 후 `로그 새로고침`을 눌러 성공 여부를 확인합니다.
+
+수동 명령이 필요할 때:
+
+```text
+scripts\08_manual_reupload.cmd
+```
+
+엑셀 새로고침 없이 DB 업로드만 다시 할 때:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\Run-ManualReupload.ps1 -SkipRefresh
+```
 
 ## 오류 전달 기준
 
-오류가 나면 아래 세 가지를 전달한다.
+해결이 안 되면 아래 3가지를 전달합니다.
 
-1. 실행한 파일명
-2. 화면에 보이는 오류 문구
-3. `data\logs\daily_update_*.log` 중 가장 최근 파일
-## Current Data Load Order
-
-The scheduled and manual recovery pipelines now use this order:
-
-1. Refresh Excel unless `-SkipRefresh` is selected.
-2. Extract local JSON from `MARKET DAILY.xlsm`.
-3. Run pre-upload validation.
-   - Local required metrics must be present and numeric.
-   - Yahoo Finance cross-check runs before upload.
-   - Yahoo Finance differences are warning/reference items, not upload blockers.
-   - Missing required metrics or invalid numeric values block upload.
-4. Upload to Supabase only after validation passes.
-5. Run post-upload DB validation.
-6. Record the job result and log path in `job_runs`.
-
-Manual test command:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\Run-DailyMarketUpdate.ps1 -SkipRefresh -LookbackDays 2
-```
-
-Admin selected rerun behavior:
-
-- In Admin → Automation Log, check one failed row and click `선택 항목 재실행`.
-- The server immediately creates a new `job_runs` row with `started` status.
-- The rerun log is written to `data/logs/admin_rerun_*.log`.
-- If PowerShell exits before the script records `success` or `failed`, the Admin server marks the still-started row as `failed` so the operator can see it.
-- The script supports `-RunId` and `-LogPath` for this flow.
-
----
+1. Admin 자동화 로그의 실패 메시지
+2. `로그 보기` 팝업의 요약과 다음 조치
+3. `data\logs\daily_update_*.log` 중 해당 시간대 파일명
