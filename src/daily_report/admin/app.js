@@ -736,5 +736,5 @@ els.viewTabs.forEach((button) => {
 
 loadReports().catch((error) => {
   els.reportTitle.textContent = '관리자 화면 오류';
-  els.metricRows.innerHTML = `<tr><td colspan="4" class="empty-state">${escapeHtml(error.message)}</td></tr>`;
+  els.metricRows.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(error.message)}</td></tr>`;
 });

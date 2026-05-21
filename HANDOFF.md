@@ -173,6 +173,9 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 - `scripts/03_start_admin.cmd`를 운영자용으로 보강했다.
   - 더블클릭하면 Admin 서버를 켜고 2초 뒤 `http://127.0.0.1:4173/admin`을 브라우저로 자동 오픈한다.
   - `DAILY_REPORT_ADMIN_PORT`가 이미 지정되어 있으면 해당 포트를 사용한다.
+- Admin 시장 데이터 표의 `No.` 열 폭을 고정했다.
+  - `colgroup`으로 번호 열을 52px 고정하고 가운데 정렬했다.
+  - 지표명/값/전일대비/작년말대비 컬럼이 남는 공간을 가져가도록 조정했다.
 - 다음 우선순위는 새 화면 추가가 아니라 실제 운영 dogfooding이다:
   1. 자동화 로그에서 실패 행 → 로그 보기 → 선택 항목 재실행 흐름 확인
   2. 검증 탭에서 실제 운영자가 승인 가능한 mismatch 1건 승인 기록
