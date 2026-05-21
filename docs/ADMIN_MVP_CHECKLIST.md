@@ -37,6 +37,7 @@ Phase 1 can be treated as complete when all of the following are true:
 - The latest scheduled automation run is visible in Admin automation logs.
 - A failed automation row shows a human-readable reason and next action.
 - Pre-upload validation blocks Supabase upload when required local metrics are missing or invalid.
+- Pre-upload validation blocks Supabase upload when any mapped metric is missing from the generated JSON.
 - Yahoo Finance differences remain visible as warnings/reference checks and do not block upload by themselves.
 - Validation approval can be recorded once for a real, operator-approved mismatch.
 - The selected date can move through data review, comment edit, preview check, and publish status update without code changes.

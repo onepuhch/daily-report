@@ -749,3 +749,9 @@ Verified:
 - Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics, 0 Python/PowerShell mapping mismatches.
 - Deferred source sheets detected: `선물투자자별순매수금액`, `주식투자자별순매수금액`, `국공채형MMF`, `일반형MMF`.
 - Updated `docs\EXCEL_COVERAGE.md` and `docs\ADMIN_MVP_CHECKLIST.md` with the automated coverage result.
+
+### 2026-05-21 — Codex — Pre-upload gate hardened
+
+- `scripts\validate_daily_data.py` now imports the active metric mapping and fails if any mapped metric is missing from the generated JSON.
+- This replaces the earlier weak count check (`at least 30`) with the current MVP requirement: all 35 mapped metrics must be present.
+- `scripts\09_validate_daily_data.cmd` passed after the change for `2026-05-20`.

@@ -10,10 +10,11 @@ from urllib.parse import quote
 
 import requests
 
-from import_historical_market_data import read_env, supabase_headers
+from import_historical_market_data import METRICS, read_env, supabase_headers
 
 
 REQUIRED_METRICS = ["kospi", "usdkrw", "wti", "us_treasury_10y"]
+EXPECTED_METRIC_KEYS = [metric.key for metric in METRICS]
 
 YAHOO_CHECKS = {
     "kospi": {"name": "KOSPI", "symbol": "^KS11", "tolerance_pct": 2.5},
@@ -139,8 +140,18 @@ def main() -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    if len(metrics) < 30:
-        errors.append(f"Expected at least 30 observations, found {len(metrics)}.")
+    missing_expected = [key for key in EXPECTED_METRIC_KEYS if key not in metrics]
+    extra_metrics = sorted(set(metrics) - set(EXPECTED_METRIC_KEYS))
+    if missing_expected:
+        errors.append(
+            "Missing mapped metrics: "
+            + ", ".join(f"{key} ({next(metric.name for metric in METRICS if metric.key == key)})" for key in missing_expected)
+            + "."
+        )
+    if len(metrics) != len(EXPECTED_METRIC_KEYS):
+        warnings.append(f"Expected {len(EXPECTED_METRIC_KEYS)} mapped observations, found {len(metrics)}.")
+    if extra_metrics:
+        warnings.append("Unexpected metrics in report JSON: " + ", ".join(extra_metrics) + ".")
 
     for key in REQUIRED_METRICS:
         item = metrics.get(key)
