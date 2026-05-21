@@ -26,6 +26,7 @@ MVP target:
 Data coverage note:
 
 - `scripts\check_excel_coverage.py` confirms 35 mapped metrics and 0 missing mapped metrics for `2026-05-20`.
+- The same check also compares Python and PowerShell metric mappings; latest result is 35 vs 35 with 0 mismatches.
 - Investor-flow and MMF workbook sheets are detected but classified as deferred scope, not current daily-report MVP omissions.
 
 ## Phase 1 Stop Conditions

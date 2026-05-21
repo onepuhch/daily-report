@@ -59,6 +59,7 @@ Result:
 - Local JSON observations: 35
 - Admin API observations: 35
 - Missing mapped metrics: 0
+- Python/PowerShell mapping parity: 35 vs 35, mismatch 0
 
 ## Extracted Metric Inventory
 
@@ -124,7 +125,7 @@ No mapped metric is currently missing from the latest local JSON or Admin API re
 
 1. Consolidate metric mappings into one source of truth.
    - Current duplication between PowerShell and Python can drift.
-   - Recommended target: generate both daily export and historical import from the same structured mapping file.
+   - `scripts\check_excel_coverage.py` now detects drift automatically, but the recommended target is still to generate both daily export and historical import from the same structured mapping file.
 2. Confirm whether the visible `MARKET DAILY` sheet includes any manually placed item that is not represented by the underlying source sheets.
    - The current XML inspection sees only presentation-level cached cells on `MARKET DAILY`.
    - A visual/manual review of the sheet is still useful before declaring final coverage.

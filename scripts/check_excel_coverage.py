@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime
@@ -20,6 +21,9 @@ EXCLUDED_SHEETS = {
     "국공채형MMF": "mmf_deferred",
     "일반형MMF": "mmf_deferred",
 }
+
+PS_METRIC_PATTERN = re.compile(r"@\{\s*(?P<body>.*?)\s*\}", re.DOTALL)
+PS_FIELD_PATTERN = re.compile(r"(?P<key>\w+)\s*=\s*(?P<value>\"[^\"]*\"|[0-9.]+)")
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,6 +92,65 @@ def workbook_sheet_summary(workbook_path: Path) -> list[dict[str, Any]]:
     return summary
 
 
+def parse_powershell_metric_defs(project_root: Path) -> list[dict[str, Any]]:
+    path = project_root / "scripts" / "Export-MarketDailyCachedValues.ps1"
+    if not path.exists():
+        return []
+
+    text = path.read_text(encoding="utf-8-sig")
+    defs: list[dict[str, Any]] = []
+    for match in PS_METRIC_PATTERN.finditer(text):
+        body = match.group("body")
+        fields: dict[str, Any] = {}
+        for field in PS_FIELD_PATTERN.finditer(body):
+            value = field.group("value")
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            fields[field.group("key")] = value
+        if "Key" not in fields or "Sheet" not in fields or "Column" not in fields:
+            continue
+        defs.append(
+            {
+                "key": fields.get("Key"),
+                "name": fields.get("Name"),
+                "category": fields.get("Category"),
+                "sheet": fields.get("Sheet"),
+                "column": fields.get("Column"),
+                "unit": fields.get("Unit"),
+                "change_mode": fields.get("ChangeMode"),
+                "value_multiplier": float(fields.get("ValueMultiplier", 1.0)),
+            }
+        )
+    return defs
+
+
+def mapping_parity(project_root: Path, metric_defs: list[dict[str, Any]]) -> dict[str, Any]:
+    ps_defs = parse_powershell_metric_defs(project_root)
+    python_by_key = {item["key"]: item for item in metric_defs}
+    ps_by_key = {item["key"]: item for item in ps_defs}
+    compared_fields = ["name", "category", "sheet", "column", "unit", "change_mode", "value_multiplier"]
+    mismatches = []
+
+    for key in sorted(set(python_by_key) & set(ps_by_key)):
+        py_item = python_by_key[key]
+        ps_item = ps_by_key[key]
+        field_diffs = {
+            field: {"python": py_item.get(field), "powershell": ps_item.get(field)}
+            for field in compared_fields
+            if py_item.get(field) != ps_item.get(field)
+        }
+        if field_diffs:
+            mismatches.append({"key": key, "fields": field_diffs})
+
+    return {
+        "python_metric_count": len(metric_defs),
+        "powershell_metric_count": len(ps_defs),
+        "missing_in_powershell": sorted(set(python_by_key) - set(ps_by_key)),
+        "missing_in_python": sorted(set(ps_by_key) - set(python_by_key)),
+        "mismatches": mismatches,
+    }
+
+
 def main() -> int:
     args = parse_args()
     project_root = Path(args.project_root).resolve()
@@ -98,6 +161,7 @@ def main() -> int:
     observed_keys = {item["metric_key"] for item in report["observations"]}
     metric_defs = [asdict(metric) for metric in METRICS]
     mapped_keys = {metric["key"] for metric in metric_defs}
+    parity = mapping_parity(project_root, metric_defs)
 
     mapped_by_sheet: dict[str, list[str]] = defaultdict(list)
     for metric in metric_defs:
@@ -125,6 +189,7 @@ def main() -> int:
         "extra_observations": sorted(observed_keys - mapped_keys),
         "mapped_by_sheet": dict(sorted(mapped_by_sheet.items())),
         "unmapped_source_sheets": unmapped_source_sheets,
+        "mapping_parity": parity,
     }
 
     if args.format == "json":
@@ -136,11 +201,13 @@ def main() -> int:
         print(f"- Mapped metrics: {result['mapped_metric_count']}")
         print(f"- Extracted observations: {result['extracted_observation_count']}")
         print(f"- Missing mapped metrics: {len(result['missing_mapped_metrics'])}")
+        print(f"- PowerShell mapping mismatches: {len(parity['mismatches'])}")
         print()
         print("## Unmapped Source Sheets")
         for item in unmapped_source_sheets:
             print(f"- `{item['sheet']}`: {item['classification']} ({len(item['data_columns'])} data columns)")
-    return 1 if result["missing_mapped_metrics"] else 0
+    has_parity_error = bool(parity["missing_in_powershell"] or parity["missing_in_python"] or parity["mismatches"])
+    return 1 if result["missing_mapped_metrics"] or has_parity_error else 0
 
 
 if __name__ == "__main__":

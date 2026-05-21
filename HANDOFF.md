@@ -746,6 +746,6 @@ Verified:
 
 - Added `scripts\check_excel_coverage.py`, `scripts\Check-ExcelCoverage.ps1`, and `scripts\10_check_excel_coverage.cmd`.
 - The coverage check reads `MARKET DAILY.xlsm`, builds the active report from the Python metric mapping, and reports mapped/missing metrics plus unmapped source sheets.
-- Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics.
+- Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics, 0 Python/PowerShell mapping mismatches.
 - Deferred source sheets detected: `선물투자자별순매수금액`, `주식투자자별순매수금액`, `국공채형MMF`, `일반형MMF`.
 - Updated `docs\EXCEL_COVERAGE.md` and `docs\ADMIN_MVP_CHECKLIST.md` with the automated coverage result.
