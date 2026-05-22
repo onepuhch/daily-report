@@ -94,6 +94,43 @@ function Get-InfomaxStartupWaitSeconds {
     return 120
 }
 
+function Get-EnvBool {
+    param(
+        $EnvValues,
+        [string]$Name,
+        [bool]$DefaultValue
+    )
+
+    $value = $EnvValues[$Name]
+    if (-not $value) {
+        return $DefaultValue
+    }
+
+    return @("1", "true", "yes", "y", "on") -contains $value.ToString().Trim().ToLowerInvariant()
+}
+
+function Get-EnvInt {
+    param(
+        $EnvValues,
+        [string]$Name,
+        [int]$DefaultValue,
+        [int]$MinimumValue = 0
+    )
+
+    $value = $EnvValues[$Name]
+    if (-not $value) {
+        return $DefaultValue
+    }
+
+    try {
+        return [Math]::Max($MinimumValue, [int]$value)
+    }
+    catch {
+        Write-Host "Invalid $Name value '$value'. Using $DefaultValue."
+        return $DefaultValue
+    }
+}
+
 function Get-MissingInfomaxProcesses {
     param([string[]]$RequiredProcesses)
 
@@ -129,7 +166,9 @@ function Test-InfomaxRunning {
     param(
         [string[]]$RequiredProcesses,
         [string]$InfomaxLauncherPath,
-        [int]$StartupWaitSeconds
+        [int]$StartupWaitSeconds,
+        [bool]$AutoSubmitLogin,
+        [int]$LoginSubmitDelaySeconds
     )
 
     $missing = @(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses)
@@ -144,7 +183,28 @@ function Test-InfomaxRunning {
     }
 
     Write-Host "Starting Infomax launcher: $InfomaxLauncherPath"
-    Start-Process -FilePath $InfomaxLauncherPath -WorkingDirectory (Split-Path -Parent $InfomaxLauncherPath)
+    $launcherProcess = Start-Process -FilePath $InfomaxLauncherPath -WorkingDirectory (Split-Path -Parent $InfomaxLauncherPath) -PassThru
+
+    if ($AutoSubmitLogin) {
+        Write-Host "Auto-submit login is enabled. Waiting $LoginSubmitDelaySeconds seconds before sending Enter to the Infomax login window..."
+        Start-Sleep -Seconds $LoginSubmitDelaySeconds
+        try {
+            $shell = New-Object -ComObject WScript.Shell
+            $activated = $shell.AppActivate($launcherProcess.Id)
+            if ($activated) {
+                Start-Sleep -Milliseconds 500
+                $shell.SendKeys("{ENTER}")
+                Write-Host "Sent Enter to Infomax login window."
+            }
+            else {
+                Write-Host "Could not activate Infomax login window automatically. If login is waiting, click the login button manually."
+            }
+        }
+        catch {
+            Write-Host "Auto-submit login failed: $($_.Exception.Message)"
+        }
+    }
+
     Write-Host "Waiting up to $StartupWaitSeconds seconds for Infomax and Excel add-in bridge to become ready..."
     Wait-InfomaxRunning -RequiredProcesses $RequiredProcesses -TimeoutSeconds $StartupWaitSeconds
 }
@@ -174,11 +234,15 @@ try {
     $requiredInfomaxProcesses = Get-RequiredInfomaxProcesses -EnvValues $envValues
     $infomaxLauncherPath = Get-InfomaxLauncherPath -EnvValues $envValues
     $infomaxStartupWaitSeconds = Get-InfomaxStartupWaitSeconds -EnvValues $envValues
+    $autoSubmitLogin = Get-EnvBool -EnvValues $envValues -Name "INFOMAX_LOGIN_AUTO_SUBMIT" -DefaultValue $true
+    $loginSubmitDelaySeconds = Get-EnvInt -EnvValues $envValues -Name "INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS" -DefaultValue 5 -MinimumValue 0
     Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
     Test-InfomaxRunning `
         -RequiredProcesses $requiredInfomaxProcesses `
         -InfomaxLauncherPath $infomaxLauncherPath `
-        -StartupWaitSeconds $infomaxStartupWaitSeconds
+        -StartupWaitSeconds $infomaxStartupWaitSeconds `
+        -AutoSubmitLogin $autoSubmitLogin `
+        -LoginSubmitDelaySeconds $loginSubmitDelaySeconds
     Write-Host "Infomax process check passed."
     Write-Host ""
 

@@ -125,11 +125,12 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 - `scripts\Refresh-InfomaxWorkbook.ps1`에 인포맥스 사전 체크와 자동 실행을 추가했다.
   - 기본 필수 프로세스: `infomaxmain`, `imxlcommapp`.
   - 둘 중 하나가 없으면 `C:\Infomax\bin\infomaxlogin.exe`를 자동 실행하고 최대 120초 동안 준비 상태를 기다린다.
+  - 로그인 창에 아이디/비밀번호가 이미 저장되어 있으면 기본값으로 5초 뒤 Enter를 보내 로그인 버튼 클릭을 시도한다.
   - 그래도 준비되지 않으면 엑셀을 열기 전에 실패 처리한다.
   - 실패 메시지는 “Infomax startup did not become ready...”로 남고, 운영자는 인포맥스 로그인/네트워크 상태를 확인한 뒤 재실행해야 한다.
-  - 필요하면 `.env`의 `INFOMAX_LAUNCHER_PATH`, `INFOMAX_STARTUP_WAIT_SECONDS`, `INFOMAX_REQUIRED_PROCESSES`로 기준을 조정할 수 있다.
+  - 필요하면 `.env`의 `INFOMAX_LAUNCHER_PATH`, `INFOMAX_STARTUP_WAIT_SECONDS`, `INFOMAX_REQUIRED_PROCESSES`, `INFOMAX_LOGIN_AUTO_SUBMIT`, `INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS`로 기준을 조정할 수 있다.
   - 기존 `INFOMAX_MAIN_PATH`도 호환용으로 읽지만, 신규 설정은 `INFOMAX_LAUNCHER_PATH`를 사용한다.
-  - 로그인 창에서 사람이 입력해야 하는 환경이면 완전 자동화가 불가능하므로, 인포맥스 자동 로그인/저장 로그인 설정이 필요하다.
+  - 로그인 창에서 사람이 아이디/비밀번호를 직접 입력해야 하는 환경이면 완전 자동화가 불가능하므로, 인포맥스 자동 로그인/저장 로그인 설정이 필요하다.
 - 최신성 경고를 보강했다.
   - `Run-DailyMarketUpdate.ps1` 성공 메시지에 `Latest generated report date`와 `requested until`을 남긴다.
   - 요청 종료일보다 실제 생성 최신일이 오래되면 로그에 freshness warning을 출력한다.
