@@ -819,3 +819,12 @@ Verified:
 - `scripts\07_check_pipeline_status.cmd`, `scripts\09_validate_daily_data.cmd`, and `scripts\10_check_excel_coverage.cmd` now set UTF-8 codepage before running.
 - `scripts\Validate-DailyData.ps1` now groups repeated Yahoo/network warnings and keeps Supabase network errors concise.
 - Rewrote `docs\OPERATOR_GUIDE.md` as a clean operator runbook for Admin, status check, validation, Excel coverage, and failed-run recovery.
+
+## 2026-05-22 Codex update - harness cleanup
+
+- Reviewed Claude Code best-practice suggestions against the official docs.
+- Added `scripts\Verify-Pipeline.ps1` and `scripts\verify-pipeline.cmd` so agents can smoke-test the admin server/API without Python.
+- Verified `scripts\verify-pipeline.cmd` and `npm.cmd run verify:pipeline`: latest `2026-05-21`, observations 35, KOSPI points 289.
+- Added `CLAUDE.md` as a short always-loaded guide that imports existing docs instead of duplicating them.
+- Added `*.stackdump` to `.gitignore` and `npm run verify:pipeline` as an alternate entry point.
+- Deferred HANDOFF-to-skill migration, project `.claude/settings.json`, and reviewer agents to separate commits because they change agent workflow more broadly.
