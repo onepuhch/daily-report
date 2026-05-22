@@ -61,11 +61,21 @@ function Invoke-StatusCheck {
   param(
     [string]$Name,
     [string]$Url,
-    [int]$ExpectedStatus
+    [int]$ExpectedStatus,
+    [string]$Method = 'GET',
+    [string]$Body
   )
 
   $req = [System.Net.WebRequest]::Create($Url)
+  $req.Method = $Method
   $req.Timeout = 15000
+  if ($PSBoundParameters.ContainsKey('Body')) {
+    $req.ContentType = 'application/json'
+    $bytes = [Text.Encoding]::UTF8.GetBytes($Body)
+    $req.ContentLength = $bytes.Length
+    $stream = $req.GetRequestStream()
+    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Close() }
+  }
   try {
     $resp = $req.GetResponse()
     $actual = [int]$resp.StatusCode
@@ -156,6 +166,8 @@ try {
   Invoke-StatusCheck "missing-date detail returns 404" "$baseUrl/api/reports/2099-01-01" 404
   $missingMetric = Invoke-JsonCheck "unknown metric returns empty series" "$baseUrl/api/metrics/__nonexistent_metric__/series"
   Assert-Condition ($missingMetric.points.Count -eq 0) "unknown metric should return empty points but got $($missingMetric.points.Count)."
+
+  Invoke-StatusCheck "invalid JSON body returns 400" "$baseUrl/api/ask" 400 -Method POST -Body 'not a json body'
 
   Write-Host "[PASS] verify-pipeline latest=$latestDate observations=$($detailObservations.Count) metric=$MetricKey points=$($series.points.Count)"
   $succeeded = $true

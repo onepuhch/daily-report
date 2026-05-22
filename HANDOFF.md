@@ -378,6 +378,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Claude — JSON 파싱 실패를 400으로 매핑
+Admin POST 엔드포인트를 일괄 점검하다가 잘못된 JSON 본문이 모두 500 "Unexpected token"으로 새는 것을 확인. `readBody()`의 `JSON.parse`를 try/catch로 감싸 `statusCode=400`을 부여하고 원래 SyntaxError 메시지를 사용자에게 그대로 전달한다. `Verify-Pipeline.ps1`의 `Invoke-StatusCheck`을 Method/Body 지원으로 확장해 `POST /api/ask`에 잘못된 본문을 보내면 400을 받는지 회귀 테스트로 추가. node --check 및 verify-pipeline 전부 통과. 같은 점검에서 코멘트 저장(`POST /api/comments/<date>`)과 검증 승인(`POST /api/validation/<date>/approvals`)이 여전히 로컬 파일만 보고 Supabase에 있는 날짜에 대해 500/404 잘못된 메시지를 내는 별도 버그를 발견했으며, 이는 다음 라운드에서 Supabase-first 패턴을 코멘트 경로에도 적용해 정리한다.
+
 ### 2026-05-22 — Claude — 공개 리포트 URL ↔ 날짜 동기화
 공개 리포트 `/report`가 URL 쿼리 파라미터 `?date=YYYY-MM-DD`를 무시하고 항상 최신 리포트만 띄우는 문제, 날짜 pill을 눌러도 URL이 변하지 않아 책갈피/공유가 불가능한 문제, 그리고 fetch 실패 시 로딩 스피너가 영구 고착되는 문제를 한 번에 정리했다. `loadReports()`가 URL에서 날짜를 읽어 유효하면 그 날짜로 시작하고, `loadReport()`는 매 호출마다 `history.replaceState`로 URL을 갱신한다. 빈 리포트 상태와 단일 날짜 로드 실패도 사용자에게 한국어 안내를 표시한다. node --check, `/report`/`/report/app.js` HTTP 200 확인. 실제 URL 책갈피 동작은 브라우저 클릭 테스트가 필요하므로 운영자 dogfooding에서 확인한다.
 

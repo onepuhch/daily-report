@@ -1556,7 +1556,14 @@ async function readBody(req) {
   }
 
   if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const text = Buffer.concat(chunks).toString('utf8');
+  try {
+    return JSON.parse(text);
+  } catch (cause) {
+    const error = new Error(`Request body is not valid JSON: ${cause.message}`);
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
 async function saveComment(date, payload) {
