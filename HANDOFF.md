@@ -124,10 +124,12 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
   - 인포맥스 프로그램이 간헐적으로 꺼질 수 있으므로, 엑셀만 열고 refresh하면 최신 데이터가 들어오지 않을 수 있다.
 - `scripts\Refresh-InfomaxWorkbook.ps1`에 인포맥스 사전 체크와 자동 실행을 추가했다.
   - 기본 필수 프로세스: `infomaxmain`, `imxlcommapp`.
-  - 둘 중 하나가 없으면 `C:\Infomax\bin\InfomaxMain.exe`를 자동 실행하고 최대 120초 동안 준비 상태를 기다린다.
+  - 둘 중 하나가 없으면 `C:\Infomax\bin\infomaxlogin.exe`를 자동 실행하고 최대 120초 동안 준비 상태를 기다린다.
   - 그래도 준비되지 않으면 엑셀을 열기 전에 실패 처리한다.
   - 실패 메시지는 “Infomax startup did not become ready...”로 남고, 운영자는 인포맥스 로그인/네트워크 상태를 확인한 뒤 재실행해야 한다.
-  - 필요하면 `.env`의 `INFOMAX_MAIN_PATH`, `INFOMAX_STARTUP_WAIT_SECONDS`, `INFOMAX_REQUIRED_PROCESSES`로 기준을 조정할 수 있다.
+  - 필요하면 `.env`의 `INFOMAX_LAUNCHER_PATH`, `INFOMAX_STARTUP_WAIT_SECONDS`, `INFOMAX_REQUIRED_PROCESSES`로 기준을 조정할 수 있다.
+  - 기존 `INFOMAX_MAIN_PATH`도 호환용으로 읽지만, 신규 설정은 `INFOMAX_LAUNCHER_PATH`를 사용한다.
+  - 로그인 창에서 사람이 입력해야 하는 환경이면 완전 자동화가 불가능하므로, 인포맥스 자동 로그인/저장 로그인 설정이 필요하다.
 - 최신성 경고를 보강했다.
   - `Run-DailyMarketUpdate.ps1` 성공 메시지에 `Latest generated report date`와 `requested until`을 남긴다.
   - 요청 종료일보다 실제 생성 최신일이 오래되면 로그에 freshness warning을 출력한다.
@@ -221,7 +223,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 
 1. Admin 자동화 로그 dogfooding
    - 2026-05-22 07:00 예약 배치는 작업 스케줄러 결과 코드 0으로 끝났지만, 최신 리포트가 `2026-05-20`에 머물러 최신성 경고 케이스가 확인됐다.
-   - 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 자동 동작하지 않는 조건을 발견했고, 배치 시작 전 `infomaxmain`, `imxlcommapp` 프로세스 체크 및 `InfomaxMain.exe` 자동 실행을 추가했다.
+   - 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 자동 동작하지 않는 조건을 발견했고, 배치 시작 전 `infomaxmain`, `imxlcommapp` 프로세스 체크 및 `infomaxlogin.exe` 자동 실행을 추가했다.
    - 인포맥스가 켜진 뒤 수동 재실행해 `2026-05-21` 업로드와 freshness OK를 확인했다.
    - 실제 실패 행 체크 → `선택 항목 재실행`을 운영자가 이해하는지 확인한다.
    - 현재는 백그라운드 실행 연결까지 완료했으나, 실제 클릭 테스트는 Excel/DB 업로드가 실행되므로 운영자 확인 후 진행한다.
@@ -357,7 +359,7 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
 ### 2026-05-22 — Codex — 인포맥스 사전 체크와 최신성 경고 보강
-07:00 배치가 성공 코드로 끝났지만 최신 리포트가 `2026-05-20`에 머문 것을 확인. 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 동작하지 않는 조건을 반영해 `infomaxmain`, `imxlcommapp` 사전 체크와 `InfomaxMain.exe` 자동 실행을 추가하고, 최신 생성일이 요청 종료일보다 오래되면 상태 점검/Admin 로그 요약에서 경고하도록 보강.
+07:00 배치가 성공 코드로 끝났지만 최신 리포트가 `2026-05-20`에 머문 것을 확인. 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 동작하지 않는 조건을 반영해 `infomaxmain`, `imxlcommapp` 사전 체크와 `infomaxlogin.exe` 자동 실행을 추가하고, 최신 생성일이 요청 종료일보다 오래되면 상태 점검/Admin 로그 요약에서 경고하도록 보강.
 
 ### 2026-05-21 — Codex — 아침 배치 시간을 07:00으로 변경
 Windows 작업 스케줄러 `Market Daily Supabase Upload`의 실제 트리거를 07:00으로 변경하고 다음 실행 시간이 `2026-05-22 오전 7:00:00`인지 확인. 예약 등록 스크립트 기본값, 운영자 가이드, HANDOFF 표기도 함께 갱신. GitHub push 완료: `0dc2d8f`.

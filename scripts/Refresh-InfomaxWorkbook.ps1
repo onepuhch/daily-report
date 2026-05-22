@@ -62,15 +62,20 @@ function Get-RequiredInfomaxProcesses {
     return @("infomaxmain", "imxlcommapp")
 }
 
-function Get-InfomaxMainPath {
+function Get-InfomaxLauncherPath {
     param($EnvValues)
+
+    $launcher = $EnvValues["INFOMAX_LAUNCHER_PATH"]
+    if ($launcher) {
+        return $launcher
+    }
 
     $configured = $EnvValues["INFOMAX_MAIN_PATH"]
     if ($configured) {
         return $configured
     }
 
-    return "C:\Infomax\bin\InfomaxMain.exe"
+    return "C:\Infomax\bin\infomaxlogin.exe"
 }
 
 function Get-InfomaxStartupWaitSeconds {
@@ -123,7 +128,7 @@ function Wait-InfomaxRunning {
 function Test-InfomaxRunning {
     param(
         [string[]]$RequiredProcesses,
-        [string]$InfomaxMainPath,
+        [string]$InfomaxLauncherPath,
         [int]$StartupWaitSeconds
     )
 
@@ -133,13 +138,13 @@ function Test-InfomaxRunning {
     }
 
     Write-Host "Infomax process(es) missing: $($missing -join ', ')"
-    if (-not (Test-Path -LiteralPath $InfomaxMainPath)) {
+    if (-not (Test-Path -LiteralPath $InfomaxLauncherPath)) {
         $expected = $RequiredProcesses -join ", "
-        throw "Infomax program is not running and the configured launcher was not found: $InfomaxMainPath. Start Infomax first, then rerun. Expected process(es): $expected."
+        throw "Infomax program is not running and the configured launcher was not found: $InfomaxLauncherPath. Start Infomax first, then rerun. Expected process(es): $expected."
     }
 
-    Write-Host "Starting Infomax: $InfomaxMainPath"
-    Start-Process -FilePath $InfomaxMainPath -WorkingDirectory (Split-Path -Parent $InfomaxMainPath)
+    Write-Host "Starting Infomax launcher: $InfomaxLauncherPath"
+    Start-Process -FilePath $InfomaxLauncherPath -WorkingDirectory (Split-Path -Parent $InfomaxLauncherPath)
     Write-Host "Waiting up to $StartupWaitSeconds seconds for Infomax and Excel add-in bridge to become ready..."
     Wait-InfomaxRunning -RequiredProcesses $RequiredProcesses -TimeoutSeconds $StartupWaitSeconds
 }
@@ -167,12 +172,12 @@ Write-Host ""
 
 try {
     $requiredInfomaxProcesses = Get-RequiredInfomaxProcesses -EnvValues $envValues
-    $infomaxMainPath = Get-InfomaxMainPath -EnvValues $envValues
+    $infomaxLauncherPath = Get-InfomaxLauncherPath -EnvValues $envValues
     $infomaxStartupWaitSeconds = Get-InfomaxStartupWaitSeconds -EnvValues $envValues
     Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
     Test-InfomaxRunning `
         -RequiredProcesses $requiredInfomaxProcesses `
-        -InfomaxMainPath $infomaxMainPath `
+        -InfomaxLauncherPath $infomaxLauncherPath `
         -StartupWaitSeconds $infomaxStartupWaitSeconds
     Write-Host "Infomax process check passed."
     Write-Host ""
