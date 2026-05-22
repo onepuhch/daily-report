@@ -378,6 +378,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Claude — 코멘트 저장 Supabase-first 정렬
+`saveComment`이 코멘트를 저장하기 전에 로컬 `data/processed/market_daily_<date>.json`을 직독해서 review HTML을 빌드했는데, Supabase에는 있지만 로컬 캐시에는 없는 날짜(예: 운영 PC가 아닌 다른 PC, 또는 캐시가 오래된 환경)에서는 ENOENT로 500이 났다. Codex가 `/api/reports`에 적용한 Supabase-first 패턴(`readReport`)을 그대로 차용해 한 줄로 정렬. 검증: 로컬 캐시에 `2026-05-21` 파일이 없는 상태에서 `POST /api/comments/2026-05-21` draft 저장이 200 응답으로 동작하고, 미존재 날짜 `2099-01-01`은 404 "Report ... not found in Supabase or local cache."로 떨어진다. verify-pipeline 전부 통과. 같은 라운드에서 발견한 `/api/supabase/reports/<date>`의 에러 메시지 순서(존재하지 않는 날짜인데 "코멘트가 필요합니다"로 응답) 문제는 UX 폴리시 영역이라 별도 사이클로 분리.
+
 ### 2026-05-22 — Claude — JSON 파싱 실패를 400으로 매핑
 Admin POST 엔드포인트를 일괄 점검하다가 잘못된 JSON 본문이 모두 500 "Unexpected token"으로 새는 것을 확인. `readBody()`의 `JSON.parse`를 try/catch로 감싸 `statusCode=400`을 부여하고 원래 SyntaxError 메시지를 사용자에게 그대로 전달한다. `Verify-Pipeline.ps1`의 `Invoke-StatusCheck`을 Method/Body 지원으로 확장해 `POST /api/ask`에 잘못된 본문을 보내면 400을 받는지 회귀 테스트로 추가. node --check 및 verify-pipeline 전부 통과. 같은 점검에서 코멘트 저장(`POST /api/comments/<date>`)과 검증 승인(`POST /api/validation/<date>/approvals`)이 여전히 로컬 파일만 보고 Supabase에 있는 날짜에 대해 500/404 잘못된 메시지를 내는 별도 버그를 발견했으며, 이는 다음 라운드에서 Supabase-first 패턴을 코멘트 경로에도 적용해 정리한다.
 
@@ -389,12 +392,6 @@ verify-pipeline은 통과했지만 에러 경로 진단에서 두 가지 잠재 
 
 ### 2026-05-22 — Codex — 자동화 로그 cross-PC 안내 보강
 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`의 로그 경로가 다른 PC 작업 폴더를 가리켜 현재 PC에서 403으로 실패하는 케이스를 확인했다. `/api/job-runs/:id/log`는 Admin UI 전용이라 허용 로그 폴더 밖 경로나 없는 파일을 만나면 운영자 안내 summary를 200으로 반환한다. 대신 `log_available:false`, `soft_failure:true`, `reason`을 함께 내려 외부 호출자가 정상 로그와 구분할 수 있게 했다. 최신 성공 job 재실행 POST는 400으로 막히는 것을 재확인했다.
-
-### 2026-05-22 — Codex — 검증 하네스와 체크리스트 현행화
-Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-pipeline.cmd`를 추가했다. 집/회사 PC 이동 중 Git과 generated 파일이 갈라지는 문제를 잡기 위해 `scripts\check-workspace-sync.cmd`도 추가했다. smoke test는 `/admin`, `/report`, 최신 API가 모두 통과하고, 체크리스트 날짜와 현재 상태를 Supabase 최신 `2026-05-21` 및 로컬 캐시 `2025-12-23` 기준으로 맞췄다.
-
-### 2026-05-22 — Codex — Python 검증 환경 복구와 운영 메시지 정리
-`.venv-docling`을 다시 만들고 `requirements.txt` 기준 `requests/openpyxl/Pillow` 설치. PowerShell 스크립트의 Python 탐지를 실제 `python -c` 실행 성공 기준으로 고쳐 `py.exe`만 있는 상태를 정상 설치로 오인하지 않게 했다. `Check-DailyReportEnvironment.ps1`에 Python/모듈 점검을 추가했고, `validate_daily_data.py`는 UTF-8 BOM JSON을 읽도록 수정. 상태 점검 freshness는 `2026-05-21` OK, 엑셀 커버리지는 mapped 35/extracted 35/missing 0.
 
 ---
 

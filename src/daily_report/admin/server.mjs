@@ -1592,8 +1592,7 @@ async function saveComment(date, payload) {
   const commentPath = path.join(processedDir, `comment_${date}.json`);
   const sqlPath = path.join(outputDir, `market_daily_${date}.comment_update.sql`);
   const reviewHtmlPath = path.join(outputDir, `market_daily_${date}.review.html`);
-  const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
-  const report = parseJson(reportRaw);
+  const report = await readReport(date);
   const reviewHtml = buildReviewHtml(report, normalized);
 
   await writeFile(commentPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
