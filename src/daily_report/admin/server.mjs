@@ -1975,8 +1975,11 @@ async function getJobRunLog(id) {
     throw error;
   }
 
-  const unavailable = (message, actions = []) => ({
+  const unavailable = (reason, message, actions = []) => ({
     job,
+    log_available: false,
+    soft_failure: true,
+    reason,
     summary: {
       level: job.status === 'success' ? 'warn' : 'error',
       title: '로그 파일을 이 PC에서 열 수 없습니다.',
@@ -1992,13 +1995,13 @@ async function getJobRunLog(id) {
   });
 
   if (!job.log_path) {
-    return unavailable('이 자동화 실행에는 로그 파일 경로가 기록되어 있지 않습니다.');
+    return unavailable('missing_log_path', '이 자동화 실행에는 로그 파일 경로가 기록되어 있지 않습니다.');
   }
 
   const resolved = path.resolve(job.log_path);
   const allowed = resolved.startsWith(path.resolve(logsDir) + path.sep);
   if (!allowed) {
-    return unavailable('이 로그는 현재 PC의 data/logs 폴더 밖 경로를 가리킵니다. 집/회사 PC가 다르거나 자동화가 다른 작업 폴더에서 실행된 경우입니다.');
+    return unavailable('outside_local_logs_dir', '이 로그는 현재 PC의 data/logs 폴더 밖 경로를 가리킵니다. 집/회사 PC가 다르거나 자동화가 다른 작업 폴더에서 실행된 경우입니다.');
   }
 
   let content;
@@ -2006,13 +2009,16 @@ async function getJobRunLog(id) {
     content = await readFile(resolved, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT') {
-      return unavailable('로그 경로는 이 프로젝트 안에 있지만 파일이 현재 PC에 없습니다. generated/log 파일이 PC 간 동기화되지 않은 상태일 수 있습니다.');
+      return unavailable('log_file_missing', '로그 경로는 이 프로젝트 안에 있지만 파일이 현재 PC에 없습니다. generated/log 파일이 PC 간 동기화되지 않은 상태일 수 있습니다.');
     }
     throw error;
   }
 
   return {
     job,
+    log_available: true,
+    soft_failure: false,
+    reason: null,
     summary: summarizeJobLog(job, content),
     content,
   };

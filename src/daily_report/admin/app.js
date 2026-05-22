@@ -442,9 +442,10 @@ async function viewJobLog(jobId) {
   try {
     const data = await fetchJson(`/api/job-runs/${encodeURIComponent(jobId)}/log`);
     const job = data.job || {};
+    const unavailableLabel = data.soft_failure ? ` · ${data.reason || 'log unavailable'}` : '';
     openLogModal({
       title: `${job.status || '-'} · ${job.job_name || '자동화 실행'}`,
-      meta: `${formatDateTime(job.started_at)} 시작 · ${job.message || '메시지 없음'}`,
+      meta: `${formatDateTime(job.started_at)} 시작 · ${job.message || '메시지 없음'}${unavailableLabel}`,
       pathText: job.log_path || '',
       summary: data.summary,
       content: data.content || '로그 파일이 비어 있습니다.',

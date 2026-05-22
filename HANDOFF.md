@@ -379,7 +379,7 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
 ### 2026-05-22 — Codex — 자동화 로그 cross-PC 안내 보강
-실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`의 로그 경로가 다른 PC 작업 폴더를 가리켜 현재 PC에서 403으로 실패하는 케이스를 확인했다. `/api/job-runs/:id/log`가 허용 로그 폴더 밖 경로나 없는 파일을 만나면 403/404 대신 운영자 안내 summary와 기록된 경로를 200으로 반환하도록 바꿨고, 최신 성공 job 재실행 POST는 400으로 막히는 것을 재확인했다.
+실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`의 로그 경로가 다른 PC 작업 폴더를 가리켜 현재 PC에서 403으로 실패하는 케이스를 확인했다. `/api/job-runs/:id/log`는 Admin UI 전용이라 허용 로그 폴더 밖 경로나 없는 파일을 만나면 운영자 안내 summary를 200으로 반환한다. 대신 `log_available:false`, `soft_failure:true`, `reason`을 함께 내려 외부 호출자가 정상 로그와 구분할 수 있게 했다. 최신 성공 job 재실행 POST는 400으로 막히는 것을 재확인했다.
 
 ### 2026-05-22 — Codex — 검증 하네스와 체크리스트 현행화
 Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-pipeline.cmd`를 추가했다. 집/회사 PC 이동 중 Git과 generated 파일이 갈라지는 문제를 잡기 위해 `scripts\check-workspace-sync.cmd`도 추가했다. smoke test는 `/admin`, `/report`, 최신 API가 모두 통과하고, 체크리스트 날짜와 현재 상태를 Supabase 최신 `2026-05-21` 및 로컬 캐시 `2025-12-23` 기준으로 맞췄다.
