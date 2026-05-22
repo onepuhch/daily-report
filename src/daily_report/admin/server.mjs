@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +16,17 @@ const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
 const logsDir = path.join(projectRoot, 'data', 'logs');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
 const execFileAsync = promisify(execFile);
+
+const categoryLabels = {
+  domestic_rates: '국내금리',
+  global_rates: '해외금리',
+  domestic_equities_fx: '국내주식',
+  global_equities: '해외주식',
+  fx: '환율',
+  crypto: '암호화폐',
+  commodities: '상품',
+  credit: '크레딧',
+};
 
 const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -48,9 +59,19 @@ function parseJson(raw) {
   return JSON.parse(raw.replace(/^\uFEFF/, ''));
 }
 
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : value;
+}
+
 function resolvePython() {
+  if (process.env.DAILY_REPORT_PYTHON) return process.env.DAILY_REPORT_PYTHON;
+
   const venvPython = path.join(projectRoot, '.venv-docling', 'Scripts', 'python.exe');
-  return process.env.DAILY_REPORT_PYTHON || venvPython;
+  if (existsSync(venvPython)) return venvPython;
+
+  return process.platform === 'win32' ? 'py' : 'python3';
 }
 
 async function readDotEnv() {
@@ -1038,7 +1059,117 @@ function buildReviewHtml(report, comment) {
 `;
 }
 
+function firstNested(value) {
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
+function mapSupabaseComment(row, status = 'draft') {
+  const comment = firstNested(row);
+  return {
+    auto_comment: comment?.auto_comment || '',
+    final_comment: comment?.final_comment || '',
+    reference_note: comment?.reference_note || '',
+    tags: Array.isArray(comment?.tags) ? comment.tags : [],
+    approved_by: comment?.approved_by || '',
+    approved_at: comment?.approved_at || null,
+    updated_at: comment?.updated_at || null,
+    status: normalizeStatus(status),
+  };
+}
+
+function mapSupabaseObservation(row) {
+  return {
+    observed_date: row.observed_date,
+    category: row.category,
+    category_label: categoryLabels[row.category] || row.category,
+    metric_key: row.metric_key,
+    metric_name: row.metric_name,
+    value: toNumber(row.value),
+    unit: row.unit || '',
+    change_1d: toNumber(row.change_1d),
+    change_1d_unit: row.change_1d_unit || '',
+    change_ytd: toNumber(row.change_ytd),
+    change_ytd_unit: row.change_ytd_unit || '',
+    source: row.source || 'infomax',
+    source_sheet: row.source_sheet || '',
+    source_cell: row.source_cell || '',
+    raw_value: row.raw_value || '',
+  };
+}
+
+function mapSupabaseReportSummary(row) {
+  const comment = firstNested(row.report_comments);
+  return {
+    id: row.id,
+    date: row.report_date,
+    title: row.title || `Daily Report ${row.report_date}`,
+    author: '자금운용본부',
+    generated_at: row.created_at || row.updated_at || '',
+    observation_count: null,
+    status: row.status || 'draft',
+    comment_status: row.status || 'draft',
+    comment_updated_at: comment?.updated_at || null,
+    modified_at: row.updated_at || row.created_at || '',
+    file: null,
+    source: 'supabase',
+  };
+}
+
+async function getSupabaseReportSummaries(limit = 500) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 500, 1000));
+  const rows = await supabaseRest(
+    'GET',
+    `reports?select=id,report_date,status,title,created_at,updated_at,published_at,report_comments(auto_comment,final_comment,reference_note,tags,approved_by,approved_at,updated_at)&order=report_date.desc&limit=${safeLimit}`,
+  );
+  return Array.isArray(rows) ? rows.map(mapSupabaseReportSummary) : [];
+}
+
+async function readSupabaseReport(date) {
+  const rows = await supabaseRest(
+    'GET',
+    `reports?select=id,report_date,status,title,created_at,updated_at,published_at,report_comments(auto_comment,final_comment,reference_note,tags,approved_by,approved_at,updated_at)&report_date=eq.${date}&limit=1`,
+  );
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) return null;
+
+  const observationRows = await supabaseRest(
+    'GET',
+    `market_observations?select=observed_date,category,metric_key,metric_name,value,unit,change_1d,change_1d_unit,change_ytd,change_ytd_unit,source,source_sheet,source_cell,raw_value&report_id=eq.${row.id}&order=created_at.asc`,
+  );
+  const observations = Array.isArray(observationRows) ? observationRows.map(mapSupabaseObservation) : [];
+  const comment = mapSupabaseComment(row.report_comments, row.status);
+  const report = {
+    id: row.id,
+    report_date: row.report_date,
+    title: row.title || `Daily Report ${row.report_date}`,
+    author: '자금운용본부',
+    generated_at: row.created_at || row.updated_at || '',
+    status: row.status || 'draft',
+    observations,
+    comment,
+    source: 'supabase',
+  };
+
+  await mkdir(outputDir, { recursive: true });
+  const reviewHtmlPath = path.join(outputDir, `market_daily_${date}.review.html`);
+  await writeFile(reviewHtmlPath, buildReviewHtml(report, comment), 'utf8');
+
+  return {
+    ...report,
+    preview_html: `output/market_daily_${date}.review.html`,
+    original_html: `output/market_daily_${date}.html`,
+  };
+}
+
 async function getReportFiles() {
+  try {
+    const reports = await getSupabaseReportSummaries();
+    if (reports.length > 0) return reports;
+  } catch (error) {
+    console.warn(`Supabase report list unavailable, falling back to local processed files: ${error.message}`);
+  }
+
   let names = [];
   try {
     names = await readdir(processedDir);
@@ -1088,6 +1219,13 @@ async function readReport(date) {
     throw error;
   }
 
+  try {
+    const report = await readSupabaseReport(date);
+    if (report) return report;
+  } catch (error) {
+    console.warn(`Supabase report ${date} unavailable, falling back to local processed file: ${error.message}`);
+  }
+
   const reportPath = path.join(processedDir, `market_daily_${date}.json`);
   const raw = await readFile(reportPath, 'utf8');
   const report = parseJson(raw);
@@ -1133,6 +1271,35 @@ async function getMetricSeries(metricKey) {
     throw error;
   }
 
+  try {
+    const rows = await supabaseRest(
+      'GET',
+      `market_observations?select=observed_date,category,metric_key,metric_name,value,unit,change_1d,change_1d_unit,change_ytd,change_ytd_unit,reports(report_date)&metric_key=eq.${encodeURIComponent(cleanMetricKey)}&order=observed_date.asc`,
+    );
+    const points = (Array.isArray(rows) ? rows : []).map((row) => ({
+      report_date: row.reports?.report_date || row.observed_date,
+      value: toNumber(row.value),
+      unit: row.unit,
+      change_1d: toNumber(row.change_1d),
+      change_1d_unit: row.change_1d_unit,
+      change_ytd: toNumber(row.change_ytd),
+      change_ytd_unit: row.change_ytd_unit,
+    }));
+
+    if (rows?.length) {
+      const latest = rows[rows.length - 1];
+      return {
+        metric_key: cleanMetricKey,
+        metric_name: latest.metric_name || cleanMetricKey,
+        category_label: categoryLabels[latest.category] || latest.category || '',
+        unit: latest.unit || '',
+        points,
+      };
+    }
+  } catch (error) {
+    console.warn(`Supabase metric series unavailable, falling back to local reports: ${error.message}`);
+  }
+
   const reports = await readAllReports();
   const points = [];
   let metricName = cleanMetricKey;
@@ -1168,6 +1335,33 @@ async function getMetricSeries(metricKey) {
 
 async function getMetricHistory(days = 7) {
   const safeDays = Math.max(1, Math.min(Number(days) || 7, 60));
+  try {
+    const reports = await getSupabaseReportSummaries(safeDays);
+    const reportDates = reports.map((report) => report.date).filter(Boolean);
+    if (reportDates.length > 0) {
+      const rows = await supabaseRest(
+        'GET',
+        `market_observations?select=observed_date,category,metric_key,value,unit,change_1d,change_1d_unit,change_ytd,change_ytd_unit,reports!inner(report_date)&reports.report_date=in.(${reportDates.join(',')})&order=observed_date.asc`,
+      );
+      const history = {};
+      for (const row of Array.isArray(rows) ? rows : []) {
+        if (!history[row.metric_key]) history[row.metric_key] = [];
+        history[row.metric_key].push({
+          report_date: row.reports?.report_date || row.observed_date,
+          value: toNumber(row.value),
+          unit: row.unit,
+          change_1d: toNumber(row.change_1d),
+          change_1d_unit: row.change_1d_unit,
+          change_ytd: toNumber(row.change_ytd),
+          change_ytd_unit: row.change_ytd_unit,
+        });
+      }
+      return { history };
+    }
+  } catch (error) {
+    console.warn(`Supabase metric history unavailable, falling back to local reports: ${error.message}`);
+  }
+
   const reports = await readAllReports();
   const recentReports = reports.slice(-safeDays);
   const history = {};
@@ -1397,8 +1591,7 @@ async function generateCommentDraft(date, payload = {}) {
     throw error;
   }
 
-  const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
-  const report = parseJson(reportRaw);
+  const report = await readReport(date);
   return {
     report_date: date,
     auto_comment: buildAutoCommentDraft(report, payload.reference_note || ''),
@@ -1406,7 +1599,66 @@ async function generateCommentDraft(date, payload = {}) {
   };
 }
 
+function normalizeCommentPayload(date, payload) {
+  return {
+    report_date: date,
+    auto_comment: payload.auto_comment || '',
+    final_comment: payload.final_comment || '',
+    reference_note: payload.reference_note || '',
+    tags: Array.isArray(payload.tags) ? payload.tags.map((item) => String(item).trim()).filter(Boolean) : [],
+    approved_by: payload.approved_by || '',
+    status: normalizeStatus(payload.status),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function updateSupabaseReportComment(date, payload) {
+  validateCommentForStatus(payload);
+
+  const row = await getReportRowByDate(date);
+  if (!row?.id) return null;
+
+  const normalized = normalizeCommentPayload(date, payload);
+  const approvedAt = ['reviewed', 'published'].includes(normalized.status)
+    ? new Date().toISOString()
+    : null;
+
+  await supabaseRest('POST', 'report_comments?on_conflict=report_id', [{
+    report_id: row.id,
+    auto_comment: normalized.auto_comment || null,
+    final_comment: normalized.final_comment || null,
+    reference_note: normalized.reference_note || null,
+    tags: normalized.tags,
+    approved_by: normalized.approved_by || null,
+    approved_at: approvedAt,
+  }]);
+
+  await supabaseRest('PATCH', `reports?id=eq.${row.id}`, {
+    status: normalized.status,
+    published_at: normalized.status === 'published' ? new Date().toISOString() : null,
+  });
+
+  const report = await readSupabaseReport(date);
+  return {
+    comment: normalized,
+    sql: buildCommentSql(date, normalized),
+    sql_file: null,
+    comment_file: null,
+    review_html: report?.preview_html || null,
+    supabase: {
+      uploaded: true,
+      report_id: row.id,
+      report_date: date,
+      observation_count: report?.observations?.length || 0,
+      status: normalized.status,
+    },
+  };
+}
+
 async function uploadReportToSupabase(date, payload) {
+  const updatedExisting = await updateSupabaseReportComment(date, payload);
+  if (updatedExisting) return updatedExisting;
+
   const saved = await saveComment(date, payload);
   const reportRaw = await readFile(path.join(processedDir, `market_daily_${date}.json`), 'utf8');
   const report = parseJson(reportRaw);
