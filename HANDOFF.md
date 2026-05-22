@@ -227,6 +227,8 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
    - 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 자동 동작하지 않는 조건을 발견했고, 배치 시작 전 `infomaxmain`, `imxlcommapp` 프로세스 체크 및 `infomaxlogin.exe` 자동 실행을 추가했다.
    - 인포맥스가 켜진 뒤 수동 재실행해 `2026-05-21` 업로드와 freshness OK를 확인했다.
    - 실제 실패 행 체크 → `선택 항목 재실행`을 운영자가 이해하는지 확인한다.
+   - 2026-05-22 API dogfooding: 최신 성공 row 재실행 POST는 400으로 차단됨을 확인했다.
+   - 2026-05-22 API dogfooding: 실패 row `0952f07d-59ba-405c-842f-27db50c82f1b`의 `log_path`가 다른 PC 경로일 때 403 대신 “현재 PC에서 열 수 없는 로그” 안내 summary를 반환하도록 수정했다.
    - 현재는 백그라운드 실행 연결까지 완료했으나, 실제 클릭 테스트는 Excel/DB 업로드가 실행되므로 운영자 확인 후 진행한다.
    - 행 기반 재실행 UX가 과하면 1단계 후반으로 미루고 “로그 요약 + 수동 명령”만 남긴다.
 2. Admin/공개 리포트 Supabase 기준 조회 확인
@@ -274,7 +276,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 | 데이터 적재 | 진행 중 | Excel 갱신 → 추출 → 검증 → Supabase 업로드 경로 작동. 운영 안정화 필요. |
 | 엑셀 원본 항목 점검 | 1차 완료 | `docs/EXCEL_COVERAGE.md` 생성. 2026-05-22 재실행 결과 로컬 엑셀 기준 mapped 35개, extracted 35개, missing 0건. |
 | 검증 gate | 진행 중 | Python 가상환경 복구 및 의존성 명시 완료. 로컬 최신 JSON `2025-12-23` 검증 pass, Supabase freshness는 `2026-05-21` OK. 최신 날짜 로컬 JSON 검증은 다음 배치 생성 직후 확인 필요. |
-| 자동화 로그 | 진행 중 | `job_runs` 기록 작동. 실패 행 강조, Admin 내 로그 보기 팝업과 운영자용 요약/다음 조치 추가. 실패 대응 절차 문서화 완료. |
+| 자동화 로그 | 진행 중 | `job_runs` 기록 작동. 실패 행 강조, Admin 내 로그 보기 팝업과 운영자용 요약/다음 조치 추가. 다른 PC 로그 경로도 안내 summary로 처리. 실제 실패 row 재실행 클릭만 운영자 확인 후 진행. |
 | Admin | 진행 중 | 데이터/코멘트/검증/미리보기/자동화 로그 중심으로 MVP 흐름 정리 중. `/api/reports` 계열은 Supabase 우선 조회로 보강되어 최신 `2026-05-21` 리포트가 보인다. |
 | 공개 리포트 | 진행 중 | Supabase 기준 HTML 조회 작동. `scripts\verify-pipeline.cmd`로 `/report` 200과 최신 리포트 API를 확인한다. 실제 브라우저 시각 확인은 운영 PC에서 필요. |
 | AI/뉴스/챗봇 | 보류 | 계약 문서는 유지하되 1단계 MVP 안정화 후 구현. |
@@ -376,6 +378,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Codex — 자동화 로그 cross-PC 안내 보강
+실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`의 로그 경로가 다른 PC 작업 폴더를 가리켜 현재 PC에서 403으로 실패하는 케이스를 확인했다. `/api/job-runs/:id/log`가 허용 로그 폴더 밖 경로나 없는 파일을 만나면 403/404 대신 운영자 안내 summary와 기록된 경로를 200으로 반환하도록 바꿨고, 최신 성공 job 재실행 POST는 400으로 막히는 것을 재확인했다.
+
 ### 2026-05-22 — Codex — 검증 하네스와 체크리스트 현행화
 Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-pipeline.cmd`를 추가했다. 집/회사 PC 이동 중 Git과 generated 파일이 갈라지는 문제를 잡기 위해 `scripts\check-workspace-sync.cmd`도 추가했다. smoke test는 `/admin`, `/report`, 최신 API가 모두 통과하고, 체크리스트 날짜와 현재 상태를 Supabase 최신 `2026-05-21` 및 로컬 캐시 `2025-12-23` 기준으로 맞췄다.
 
@@ -387,9 +392,6 @@ Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-
 
 ### 2026-05-22 — Codex — 인포맥스 사전 체크와 최신성 경고 보강
 07:00 배치가 성공 코드로 끝났지만 최신 리포트가 `2026-05-20`에 머문 것을 확인. 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 동작하지 않는 조건을 반영해 `infomaxmain`, `imxlcommapp` 사전 체크와 `infomaxlogin.exe` 자동 실행을 추가하고, 최신 생성일이 요청 종료일보다 오래되면 상태 점검/Admin 로그 요약에서 경고하도록 보강.
-
-### 2026-05-21 — Codex — 아침 배치 시간을 07:00으로 변경
-Windows 작업 스케줄러 `Market Daily Supabase Upload`의 실제 트리거를 07:00으로 변경하고 다음 실행 시간이 `2026-05-22 오전 7:00:00`인지 확인. 예약 등록 스크립트 기본값, 운영자 가이드, HANDOFF 표기도 함께 갱신. GitHub push 완료: `0dc2d8f`.
 
 ---
 

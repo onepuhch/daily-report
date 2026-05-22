@@ -34,6 +34,11 @@ function Invoke-Git {
     return (& git -c "safe.directory=$($root.Replace('\', '/'))" -C $root @GitArgs 2>&1)
 }
 
+function Remove-GitWarnings {
+    param([object[]]$Lines)
+    return @($Lines | Where-Object { "$_" -notmatch "^warning: " })
+}
+
 function Get-ReportDateFromName {
     param([string]$Name)
     if ($Name -match "market_daily_(\d{4}-\d{2}-\d{2})") {
@@ -111,7 +116,7 @@ else {
     $branch = (Invoke-Git "branch" "--show-current" | Select-Object -First 1)
     $head = (Invoke-Git "rev-parse" "--short" "HEAD" | Select-Object -First 1)
     $upstream = (Invoke-Git "rev-parse" "--abbrev-ref" "--symbolic-full-name" "@{upstream}" | Select-Object -First 1)
-    $dirty = @(Invoke-Git "status" "--short")
+    $dirty = Remove-GitWarnings @(Invoke-Git "status" "--short")
 
     Write-Host "[INFO] Branch: $branch"
     Write-Host "[INFO] HEAD: $head"

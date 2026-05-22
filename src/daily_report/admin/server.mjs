@@ -1974,18 +1974,31 @@ async function getJobRunLog(id) {
     error.statusCode = 404;
     throw error;
   }
+
+  const unavailable = (message, actions = []) => ({
+    job,
+    summary: {
+      level: job.status === 'success' ? 'warn' : 'error',
+      title: '로그 파일을 이 PC에서 열 수 없습니다.',
+      message,
+      actions: actions.length > 0 ? actions : [
+        '자동화가 실행된 PC에서 Admin을 열어 로그 보기',
+        '현재 화면의 상태와 메시지를 기준으로 원인 먼저 확인',
+        '필요하면 같은 날짜로 수동 재실행',
+      ],
+      details: job.log_path ? [`기록된 로그 경로: ${job.log_path}`] : [],
+    },
+    content: message,
+  });
+
   if (!job.log_path) {
-    const error = new Error('No log file path recorded for this job run.');
-    error.statusCode = 404;
-    throw error;
+    return unavailable('이 자동화 실행에는 로그 파일 경로가 기록되어 있지 않습니다.');
   }
 
   const resolved = path.resolve(job.log_path);
   const allowed = resolved.startsWith(path.resolve(logsDir) + path.sep);
   if (!allowed) {
-    const error = new Error('Log path is outside the allowed log directory.');
-    error.statusCode = 403;
-    throw error;
+    return unavailable('이 로그는 현재 PC의 data/logs 폴더 밖 경로를 가리킵니다. 집/회사 PC가 다르거나 자동화가 다른 작업 폴더에서 실행된 경우입니다.');
   }
 
   let content;
@@ -1993,9 +2006,7 @@ async function getJobRunLog(id) {
     content = await readFile(resolved, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT') {
-      const notFound = new Error('Log file does not exist on this computer.');
-      notFound.statusCode = 404;
-      throw notFound;
+      return unavailable('로그 경로는 이 프로젝트 안에 있지만 파일이 현재 PC에 없습니다. generated/log 파일이 PC 간 동기화되지 않은 상태일 수 있습니다.');
     }
     throw error;
   }
