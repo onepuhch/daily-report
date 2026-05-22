@@ -5,6 +5,7 @@ See @README.md for the project overview, @docs/ARCHITECTURE.md for system shape,
 ## Commands
 - Start admin/public report locally: `scripts\03_start_admin.cmd`
 - Verify the server/API smoke path: `scripts\verify-pipeline.cmd`
+- Check Git/local generated files/Supabase drift: `scripts\check-workspace-sync.cmd`
 - Check environment: `scripts\00_check_environment.cmd`
 - Check Supabase pipeline status: `scripts\07_check_pipeline_status.cmd`
 - Validate local daily data: `scripts\09_validate_daily_data.cmd`
@@ -13,6 +14,7 @@ See @README.md for the project overview, @docs/ARCHITECTURE.md for system shape,
 
 ## Workflow
 - For multi-file changes, explore first and write a short plan before editing.
+- When moving between PCs, run `git pull`, then `scripts\check-workspace-sync.cmd` before editing.
 - After changing `.mjs` or `.js`, run `node --check` on touched files.
 - Before commit, run `scripts\verify-pipeline.cmd` when the admin server or API behavior changed.
 - Update `HANDOFF.md` with current state, next steps, and a recent work-log entry before commit/push.

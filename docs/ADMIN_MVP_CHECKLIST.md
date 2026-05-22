@@ -1,6 +1,6 @@
 # Admin MVP Checklist
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 ## Purpose
 
@@ -25,8 +25,9 @@ MVP target:
 
 Data coverage note:
 
-- `scripts\check_excel_coverage.py` confirms 35 mapped metrics and 0 missing mapped metrics for `2026-05-20`.
-- The same check also compares Python and PowerShell metric mappings; latest result is 35 vs 35 with 0 mismatches.
+- `scripts\check_excel_coverage.py` confirms 35 mapped metrics and 0 missing mapped metrics on the local workbook cache.
+- The 2026-05-22 rerun used the local `2025-12-23` workbook/cache and found 35 extracted observations with 0 Python/PowerShell mapping mismatches.
+- Admin/API smoke verification now uses Supabase latest `2026-05-21` and passes with 35 observations.
 - Investor-flow and MMF workbook sheets are detected but classified as deferred scope, not current daily-report MVP omissions.
 
 ## Phase 1 Stop Conditions

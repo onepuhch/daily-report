@@ -234,6 +234,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
    - `/api/reports`, `/api/reports/:date`, `/api/history`, `/api/metrics/:metric_key/series`, 코멘트 초안/저장 경로를 Supabase 우선으로 보강했다.
    - 검증 결과 최신 리포트는 `2026-05-21`, 리포트 수 289건, 최신 observations 35건, KOSPI series 289포인트.
    - 2026-05-22 재확인: `/api/reports`, `/api/reports/2026-05-21`, `/api/history?days=3`, `/api/metrics/kospi/series`, `/admin`, `/report` 응답 정상. 최신 리포트는 `2026-05-21`, observations 35건, KOSPI series 289포인트.
+   - 2026-05-22 `scripts\verify-pipeline.cmd`와 `npm.cmd run verify:pipeline` 모두 통과. 앞으로 Admin/API 변경 후 기본 smoke test로 사용한다.
    - Edge headless는 현재 Codex 세션에서 GPU 프로세스 오류로 DOM 렌더링 검증이 불가했다. 운영 PC에서 `scripts\03_start_admin.cmd`로 실제 브라우저를 열어 Admin 날짜 드롭다운/미리보기 iframe/공개 `/report` 첫 화면만 눈으로 확인한다.
 3. 검증 pre-upload gate 운영 확인
    - 업로드 전 검증 실패 시 Supabase 적재가 막히는지 실제 실패 케이스에서 확인한다.
@@ -275,7 +276,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 | 검증 gate | 진행 중 | Python 가상환경 복구 및 의존성 명시 완료. 로컬 최신 JSON `2025-12-23` 검증 pass, Supabase freshness는 `2026-05-21` OK. 최신 날짜 로컬 JSON 검증은 다음 배치 생성 직후 확인 필요. |
 | 자동화 로그 | 진행 중 | `job_runs` 기록 작동. 실패 행 강조, Admin 내 로그 보기 팝업과 운영자용 요약/다음 조치 추가. 실패 대응 절차 문서화 완료. |
 | Admin | 진행 중 | 데이터/코멘트/검증/미리보기/자동화 로그 중심으로 MVP 흐름 정리 중. `/api/reports` 계열은 Supabase 우선 조회로 보강되어 최신 `2026-05-21` 리포트가 보인다. |
-| 공개 리포트 | 진행 중 | Supabase 기준 HTML 조회 작동. 최신 리포트/히스토리/시계열 API가 Supabase를 우선 사용한다. 원본 항목 누락/분류/표기 확인이 우선. |
+| 공개 리포트 | 진행 중 | Supabase 기준 HTML 조회 작동. `scripts\verify-pipeline.cmd`로 `/report` 200과 최신 리포트 API를 확인한다. 실제 브라우저 시각 확인은 운영 PC에서 필요. |
 | AI/뉴스/챗봇 | 보류 | 계약 문서는 유지하되 1단계 MVP 안정화 후 구현. |
 
 이전 리디자인 상세 플랜은 참고용으로만 본다: `docs/REDESIGN_PLAN.md`
@@ -375,6 +376,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Codex — 검증 하네스와 체크리스트 현행화
+Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-pipeline.cmd`를 추가했다. 집/회사 PC 이동 중 Git과 generated 파일이 갈라지는 문제를 잡기 위해 `scripts\check-workspace-sync.cmd`도 추가했다. smoke test는 `/admin`, `/report`, 최신 API가 모두 통과하고, 체크리스트 날짜와 현재 상태를 Supabase 최신 `2026-05-21` 및 로컬 캐시 `2025-12-23` 기준으로 맞췄다.
+
 ### 2026-05-22 — Codex — Python 검증 환경 복구와 운영 메시지 정리
 `.venv-docling`을 다시 만들고 `requirements.txt` 기준 `requests/openpyxl/Pillow` 설치. PowerShell 스크립트의 Python 탐지를 실제 `python -c` 실행 성공 기준으로 고쳐 `py.exe`만 있는 상태를 정상 설치로 오인하지 않게 했다. `Check-DailyReportEnvironment.ps1`에 Python/모듈 점검을 추가했고, `validate_daily_data.py`는 UTF-8 BOM JSON을 읽도록 수정. 상태 점검 freshness는 `2026-05-21` OK, 엑셀 커버리지는 mapped 35/extracted 35/missing 0.
 
@@ -387,19 +391,17 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 ### 2026-05-21 — Codex — 아침 배치 시간을 07:00으로 변경
 Windows 작업 스케줄러 `Market Daily Supabase Upload`의 실제 트리거를 07:00으로 변경하고 다음 실행 시간이 `2026-05-22 오전 7:00:00`인지 확인. 예약 등록 스크립트 기본값, 운영자 가이드, HANDOFF 표기도 함께 갱신. GitHub push 완료: `0dc2d8f`.
 
-### 2026-05-20 — Codex — 자동화 로그 운영자 친화화 1차
-Admin 자동화 로그에서 실패 행 강조, 실패 메시지 줄바꿈, 로그 경로 복사 버튼을 추가. `HANDOFF.md`에 “자동화 실패 시 대응” 절차 추가.
-
 ---
 
 ## 세션 시작 체크리스트
 
 1. `git pull`
-2. 이 파일 (`HANDOFF.md`) **"지금 바로 할 일"** 항목 확인
-3. **"절대 건드리지 말 것"** 항목 숙지
-4. 필요 시 **"의사결정 기록"**에서 관련 D-XXX 항목 참고
-5. 작업 진행
-6. 작업 끝나면:
+2. `scripts\check-workspace-sync.cmd`로 Git/origin, 로컬 generated 파일, Supabase 최신 날짜 차이를 확인
+3. 이 파일 (`HANDOFF.md`) **"지금 바로 할 일"** 항목 확인
+4. **"절대 건드리지 말 것"** 항목 숙지
+5. 필요 시 **"의사결정 기록"**에서 관련 D-XXX 항목 참고
+6. 작업 진행
+7. 작업 끝나면:
    - "지금 바로 할 일" 갱신 (다음 사람이 무엇부터 할지)
    - 새 결정 있으면 D-XXX 항목 append
    - "작업 일지" 최상단에 1줄 추가 (옛 항목 밀어내기, 5건 유지)

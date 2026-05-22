@@ -1,6 +1,6 @@
 # Excel Coverage
 
-Last checked: 2026-05-21
+Last checked: 2026-05-22
 
 ## Scope
 
@@ -38,26 +38,26 @@ Important implementation note:
 
 ## Latest Coverage Result
 
-Latest local processed file:
+Latest local processed file available in this workstation:
 
-- `data/processed/market_daily_2026-05-20.json`
+- `data/processed/market_daily_2025-12-23.json`
 
 Latest API check:
 
-- `/api/reports/2026-05-20`
+- `/api/reports/2026-05-21`
 
 Latest automated source coverage check:
 
 - Command: `scripts\10_check_excel_coverage.cmd`
 - Wrapper: `scripts\Check-ExcelCoverage.ps1`
 - Core script: `scripts\check_excel_coverage.py`
-- Result date: `2026-05-20`
+- Result date: `2025-12-23` local workbook/cache
 
 Result:
 
 - Expected mapped metrics: 35
 - Local JSON observations: 35
-- Admin API observations: 35
+- Admin API observations: 35 for Supabase latest `2026-05-21`
 - Missing mapped metrics: 0
 - Python/PowerShell mapping parity: 35 vs 35, mismatch 0
 
