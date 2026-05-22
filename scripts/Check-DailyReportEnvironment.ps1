@@ -58,6 +58,61 @@ function Test-Placeholder {
     return (-not $Value) -or $Value.StartsWith("your-") -or $Value.Contains("your-project-ref")
 }
 
+function Test-PythonCandidate {
+    param([string]$Candidate)
+
+    try {
+        & $Candidate -c "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+}
+
+function Resolve-Python {
+    param([string]$Root)
+
+    if ($env:DAILY_REPORT_PYTHON) {
+        if (Test-PythonCandidate -Candidate $env:DAILY_REPORT_PYTHON) {
+            return $env:DAILY_REPORT_PYTHON
+        }
+        return $null
+    }
+
+    $venvPython = Join-Path $Root ".venv-docling\Scripts\python.exe"
+    if ((Test-Path -LiteralPath $venvPython) -and (Test-PythonCandidate -Candidate $venvPython)) {
+        return $venvPython
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python -and (Test-PythonCandidate -Candidate $python.Source)) {
+        return $python.Source
+    }
+
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if ($py -and (Test-PythonCandidate -Candidate $py.Source)) {
+        return $py.Source
+    }
+
+    return $null
+}
+
+function Test-PythonModule {
+    param(
+        [string]$Python,
+        [string]$ModuleName
+    )
+
+    try {
+        & $Python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$ModuleName') else 1)" 2>$null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+}
+
 $root = Get-ProjectRoot
 $envPath = Join-Path $root ".env"
 $envValues = Read-DotEnv -Path $envPath
@@ -74,6 +129,27 @@ if ($node) {
 }
 else {
     Write-Check "FAIL" "Node.js is not installed or not available in PATH."
+}
+
+$python = Resolve-Python -Root $root
+if ($python) {
+    $pythonVersion = (& $python --version) 2>&1
+    Write-Check "OK" "Python detected: $($pythonVersion -join ' ')"
+
+    foreach ($module in @("requests", "openpyxl")) {
+        if (Test-PythonModule -Python $python -ModuleName $module) {
+            Write-Check "OK" "Python module available: $module"
+        }
+        else {
+            Write-Check "FAIL" "Python module missing: $module. Run: $python -m pip install -r requirements.txt"
+        }
+    }
+}
+else {
+    Write-Check "FAIL" "Python 3 is not installed or py.exe has no installed Python. Install Python, recreate .venv-docling, or set DAILY_REPORT_PYTHON."
+    Write-Host "       Recommended setup:"
+    Write-Host "       py -3 -m venv .venv-docling"
+    Write-Host "       .venv-docling\Scripts\python.exe -m pip install -r requirements.txt"
 }
 
 $requiredFiles = @(
@@ -189,5 +265,5 @@ Write-Host "1. On the Infomax PC, run scripts\04_refresh_infomax_excel.cmd"
 Write-Host "2. Run scripts\01_extract_preview.cmd"
 Write-Host "3. Run scripts\03_start_admin.cmd"
 Write-Host "4. Open http://127.0.0.1:4173/admin"
-Write-Host "5. Open http://127.0.0.1:4173/reports"
+Write-Host "5. Open http://127.0.0.1:4173/report"
 Write-Host ""

@@ -64,8 +64,12 @@ def latest_report_json(project_root: Path) -> Path:
 def load_report(project_root: Path, report_date: str | None) -> dict[str, Any]:
     path = project_root / "data" / "processed" / f"market_daily_{report_date}.json" if report_date else latest_report_json(project_root)
     if not path.exists():
-        raise RuntimeError(f"Report JSON not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            display_path = path.relative_to(project_root)
+        except ValueError:
+            display_path = path
+        raise RuntimeError(f"Report JSON not found: {display_path}")
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def metric_map(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -134,7 +138,24 @@ def yahoo_page_url(symbol: str) -> str:
 def main() -> int:
     args = parse_args()
     project_root = Path(args.project_root)
-    report = load_report(project_root, args.report_date)
+    try:
+        report = load_report(project_root, args.report_date)
+    except RuntimeError as exc:
+        print(
+            json.dumps(
+                {
+                    "report_date": args.report_date,
+                    "observations": 0,
+                    "status": "fail",
+                    "errors": [str(exc)],
+                    "warnings": [],
+                    "cross_checks": [],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 1
     metrics = metric_map(report)
     report_date = report["report_date"]
     errors: list[str] = []

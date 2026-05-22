@@ -47,6 +47,29 @@ scripts\03_start_admin.cmd
 http://127.0.0.1:4173/admin
 ```
 
+공개 리포트 화면:
+
+```text
+http://127.0.0.1:4173/report
+```
+
+## Python 환경 확인
+
+상태 점검, 데이터 검증, 엑셀 커버리지 점검, Supabase 업로드는 Python 3가 필요합니다.
+
+```text
+scripts\00_check_environment.cmd
+```
+
+여기서 Python 또는 `requests`/`openpyxl` 누락이 보이면 아래처럼 `.venv-docling`을 다시 만듭니다.
+
+```powershell
+py -3 -m venv .venv-docling
+.venv-docling\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Python을 다른 위치에 설치해 쓰는 PC에서는 `DAILY_REPORT_PYTHON`에 Python 실행 파일 경로를 지정합니다.
+
 ## 상태 점검
 
 ```text
