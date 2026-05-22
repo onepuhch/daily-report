@@ -62,20 +62,86 @@ function Get-RequiredInfomaxProcesses {
     return @("infomaxmain", "imxlcommapp")
 }
 
-function Test-InfomaxRunning {
+function Get-InfomaxMainPath {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_MAIN_PATH"]
+    if ($configured) {
+        return $configured
+    }
+
+    return "C:\Infomax\bin\InfomaxMain.exe"
+}
+
+function Get-InfomaxStartupWaitSeconds {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_STARTUP_WAIT_SECONDS"]
+    if ($configured) {
+        try {
+            return [Math]::Max(10, [int]$configured)
+        }
+        catch {
+            Write-Host "Invalid INFOMAX_STARTUP_WAIT_SECONDS value '$configured'. Using 120 seconds."
+        }
+    }
+
+    return 120
+}
+
+function Get-MissingInfomaxProcesses {
     param([string[]]$RequiredProcesses)
 
     $running = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName.ToLowerInvariant() })
-    $missing = @(
+    return @(
         $RequiredProcesses |
             Where-Object { $running -notcontains $_.ToLowerInvariant() }
     )
+}
 
-    if ($missing.Count -gt 0) {
-        $expected = $RequiredProcesses -join ", "
-        $missingText = $missing -join ", "
-        throw "Infomax program is not running or the Excel add-in bridge is unavailable. Missing process(es): $missingText. Start Infomax first, wait until login/data services are ready, then rerun. Expected process(es): $expected."
+function Wait-InfomaxRunning {
+    param(
+        [string[]]$RequiredProcesses,
+        [int]$TimeoutSeconds
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $missing = @(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses)
+        if ($missing.Count -eq 0) {
+            return
+        }
+
+        Start-Sleep -Seconds 5
+    } while ((Get-Date) -lt $deadline)
+
+    $expected = $RequiredProcesses -join ", "
+    $missingText = (@(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses) -join ", ")
+    throw "Infomax startup did not become ready within $TimeoutSeconds seconds. Missing process(es): $missingText. Check Infomax login/network state, then rerun. Expected process(es): $expected."
+}
+
+function Test-InfomaxRunning {
+    param(
+        [string[]]$RequiredProcesses,
+        [string]$InfomaxMainPath,
+        [int]$StartupWaitSeconds
+    )
+
+    $missing = @(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses)
+    if ($missing.Count -eq 0) {
+        return
     }
+
+    Write-Host "Infomax process(es) missing: $($missing -join ', ')"
+    if (-not (Test-Path -LiteralPath $InfomaxMainPath)) {
+        $expected = $RequiredProcesses -join ", "
+        throw "Infomax program is not running and the configured launcher was not found: $InfomaxMainPath. Start Infomax first, then rerun. Expected process(es): $expected."
+    }
+
+    Write-Host "Starting Infomax: $InfomaxMainPath"
+    Start-Process -FilePath $InfomaxMainPath -WorkingDirectory (Split-Path -Parent $InfomaxMainPath)
+    Write-Host "Waiting up to $StartupWaitSeconds seconds for Infomax and Excel add-in bridge to become ready..."
+    Wait-InfomaxRunning -RequiredProcesses $RequiredProcesses -TimeoutSeconds $StartupWaitSeconds
 }
 
 $root = Get-ProjectRoot
@@ -101,8 +167,13 @@ Write-Host ""
 
 try {
     $requiredInfomaxProcesses = Get-RequiredInfomaxProcesses -EnvValues $envValues
+    $infomaxMainPath = Get-InfomaxMainPath -EnvValues $envValues
+    $infomaxStartupWaitSeconds = Get-InfomaxStartupWaitSeconds -EnvValues $envValues
     Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
-    Test-InfomaxRunning -RequiredProcesses $requiredInfomaxProcesses
+    Test-InfomaxRunning `
+        -RequiredProcesses $requiredInfomaxProcesses `
+        -InfomaxMainPath $infomaxMainPath `
+        -StartupWaitSeconds $infomaxStartupWaitSeconds
     Write-Host "Infomax process check passed."
     Write-Host ""
 

@@ -28,7 +28,9 @@ Market Daily Supabase Upload
 
 - 인포맥스 프로그램이 먼저 켜져 있어야 엑셀 add-in이 정상 동작합니다.
 - 자동화는 엑셀을 열기 전에 `infomaxmain`, `imxlcommapp` 프로세스를 확인합니다.
-- 둘 중 하나가 없으면 엑셀을 열지 않고 실패 처리하며, Admin 자동화 로그에 인포맥스를 먼저 실행하라는 메시지가 남습니다.
+- 둘 중 하나가 없으면 `C:\Infomax\bin\InfomaxMain.exe`를 자동 실행하고 최대 120초 동안 준비 상태를 기다립니다.
+- 그래도 준비되지 않으면 엑셀을 열지 않고 실패 처리하며, Admin 자동화 로그에 인포맥스 로그인/네트워크 상태를 확인하라는 메시지가 남습니다.
+- 경로가 다른 PC에서는 `.env`에 `INFOMAX_MAIN_PATH=...`를 설정합니다.
 
 ## Admin 열기
 
