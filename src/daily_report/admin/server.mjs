@@ -1201,11 +1201,19 @@ async function getReportFiles() {
 }
 
 async function readAllReports() {
-  const files = await getReportFiles();
-  const reports = [];
+  let names = [];
+  try {
+    names = await readdir(processedDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
 
-  for (const file of files) {
-    const raw = await readFile(path.join(projectRoot, file.file), 'utf8');
+  const matches = names.filter((name) => /^market_daily_\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort();
+
+  const reports = [];
+  for (const name of matches) {
+    const raw = await readFile(path.join(processedDir, name), 'utf8');
     reports.push(parseJson(raw));
   }
 
@@ -1227,7 +1235,17 @@ async function readReport(date) {
   }
 
   const reportPath = path.join(processedDir, `market_daily_${date}.json`);
-  const raw = await readFile(reportPath, 'utf8');
+  let raw;
+  try {
+    raw = await readFile(reportPath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      const notFound = new Error(`Report ${date} not found in Supabase or local cache.`);
+      notFound.statusCode = 404;
+      throw notFound;
+    }
+    throw error;
+  }
   const report = parseJson(raw);
 
   let comment = null;

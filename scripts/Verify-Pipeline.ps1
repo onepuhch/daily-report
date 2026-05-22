@@ -57,6 +57,29 @@ function Invoke-HttpCheck {
   }
 }
 
+function Invoke-StatusCheck {
+  param(
+    [string]$Name,
+    [string]$Url,
+    [int]$ExpectedStatus
+  )
+
+  $req = [System.Net.WebRequest]::Create($Url)
+  $req.Timeout = 15000
+  try {
+    $resp = $req.GetResponse()
+    $actual = [int]$resp.StatusCode
+    $resp.Close()
+  } catch [System.Net.WebException] {
+    if ($null -eq $_.Exception.Response) {
+      throw "[FAIL] $Name $Url - $($_.Exception.Message)"
+    }
+    $actual = [int]$_.Exception.Response.StatusCode
+  }
+  Assert-Condition ($actual -eq $ExpectedStatus) "$Name expected HTTP $ExpectedStatus but got $actual at $Url"
+  Write-Host "[OK] $Name HTTP $actual"
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Resolve-Path -LiteralPath (Join-Path $scriptDir "..")
 $node = Get-Command node -ErrorAction SilentlyContinue
@@ -129,6 +152,10 @@ try {
 
   Invoke-HttpCheck "admin" "$baseUrl/admin"
   Invoke-HttpCheck "public report" "$baseUrl/report"
+
+  Invoke-StatusCheck "missing-date detail returns 404" "$baseUrl/api/reports/2099-01-01" 404
+  $missingMetric = Invoke-JsonCheck "unknown metric returns empty series" "$baseUrl/api/metrics/__nonexistent_metric__/series"
+  Assert-Condition ($missingMetric.points.Count -eq 0) "unknown metric should return empty points but got $($missingMetric.points.Count)."
 
   Write-Host "[PASS] verify-pipeline latest=$latestDate observations=$($detailObservations.Count) metric=$MetricKey points=$($series.points.Count)"
   $succeeded = $true

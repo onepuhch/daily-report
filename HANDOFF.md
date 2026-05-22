@@ -378,6 +378,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Claude — API 에러 매핑/fallback 버그 수정
+verify-pipeline은 통과했지만 에러 경로 진단에서 두 가지 잠재 버그를 확인했다. (1) 존재하지 않는 날짜 조회 `/api/reports/2099-01-01`이 ENOENT 그대로 500을 반환했다 → 404로 매핑. (2) Supabase 응답이 비어 있을 때 fallback인 `readAllReports`가 Supabase 요약 객체의 `file: null`을 `path.join`에 넘겨 폭발했다 → `readAllReports`를 로컬 디렉터리 직독으로 단순화. 결과: 미존재 리포트는 404, 미존재 metric은 200+빈 points로 깔끔하게 응답. 재발 방지로 `Verify-Pipeline.ps1`에 음수 경로 두 건(`Invoke-StatusCheck` 헬퍼 추가) 회귀 테스트 추가. node --check + verify-pipeline 전부 통과.
+
 ### 2026-05-22 — Codex — 자동화 로그 cross-PC 안내 보강
 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`의 로그 경로가 다른 PC 작업 폴더를 가리켜 현재 PC에서 403으로 실패하는 케이스를 확인했다. `/api/job-runs/:id/log`는 Admin UI 전용이라 허용 로그 폴더 밖 경로나 없는 파일을 만나면 운영자 안내 summary를 200으로 반환한다. 대신 `log_available:false`, `soft_failure:true`, `reason`을 함께 내려 외부 호출자가 정상 로그와 구분할 수 있게 했다. 최신 성공 job 재실행 POST는 400으로 막히는 것을 재확인했다.
 
@@ -389,9 +392,6 @@ Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-
 
 ### 2026-05-22 — Codex — Admin/공개 리포트 Supabase 우선 조회 보강
 `/api/job-runs`는 최신 Supabase run을 보지만 `/api/reports`가 로컬 processed 파일만 봐서 Admin/공개 리포트가 최신 `2026-05-21`을 표시하지 못하는 문제를 수정. `/api/reports`, `/api/reports/:date`, `/api/history`, `/api/metrics/:metric_key/series`, 코멘트 초안/저장 경로를 Supabase 우선으로 보강했고, 최신 리포트 35개 observations 및 KOSPI series 289포인트 응답을 확인.
-
-### 2026-05-22 — Codex — 인포맥스 사전 체크와 최신성 경고 보강
-07:00 배치가 성공 코드로 끝났지만 최신 리포트가 `2026-05-20`에 머문 것을 확인. 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 동작하지 않는 조건을 반영해 `infomaxmain`, `imxlcommapp` 사전 체크와 `infomaxlogin.exe` 자동 실행을 추가하고, 최신 생성일이 요청 종료일보다 오래되면 상태 점검/Admin 로그 요약에서 경고하도록 보강.
 
 ---
 
