@@ -134,27 +134,63 @@ async function fetchJson(url) {
 }
 
 /* ─── Data loading ─── */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function readDateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('date');
+  return raw && DATE_PATTERN.test(raw) ? raw : null;
+}
+
+function syncUrlToDate(date) {
+  const params = new URLSearchParams(window.location.search);
+  if (date) {
+    params.set('date', date);
+  } else {
+    params.delete('date');
+  }
+  const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', next);
+}
+
 async function loadReports() {
   const data = await fetchJson('/api/reports');
   state.reports = data.reports || [];
   renderDatePicker();
-  if (state.reports.length > 0) {
-    await loadReport(state.reports[0].date);
+
+  if (state.reports.length === 0) {
+    dom.reportLoading.innerHTML = '<p>표시할 리포트가 아직 없습니다.</p>';
+    syncUrlToDate(null);
+    return;
   }
+
+  const urlDate = readDateFromUrl();
+  const knownDates = new Set(state.reports.map((r) => r.date));
+  const target = urlDate && knownDates.has(urlDate) ? urlDate : state.reports[0].date;
+  await loadReport(target);
   loadHistory().catch(() => {});
 }
 
 async function loadReport(date) {
   state.currentDate = date;
+  syncUrlToDate(date);
   renderDatePicker();
   dom.reportLoading.hidden = false;
+  dom.reportLoading.textContent = '리포트를 불러오는 중...';
   dom.reportGrid.hidden = true;
-  const data = await fetchJson(`/api/reports/${date}`);
-  state.currentReport = data;
-  dom.chatContextLabel.textContent = `${dayLabel(date)} 데이터 기반`;
-  renderReport(data);
-  dom.reportLoading.hidden = true;
-  dom.reportGrid.hidden = false;
+  try {
+    const data = await fetchJson(`/api/reports/${date}`);
+    state.currentReport = data;
+    dom.chatContextLabel.textContent = `${dayLabel(date)} 데이터 기반`;
+    renderReport(data);
+    dom.reportLoading.hidden = true;
+    dom.reportGrid.hidden = false;
+  } catch (err) {
+    dom.reportLoading.hidden = false;
+    dom.reportLoading.innerHTML = `<p style="color:var(--down)">${esc(date)} 리포트 로드 실패: ${esc(err.message)}</p>`;
+    dom.reportGrid.hidden = true;
+    throw err;
+  }
 }
 
 async function loadHistory() {
@@ -170,7 +206,7 @@ function renderDatePicker() {
             type="button" data-date="${esc(r.date)}">${dayLabel(r.date)}</button>
   `).join('');
   dom.datePicker.querySelectorAll('[data-date]').forEach(btn => {
-    btn.addEventListener('click', () => loadReport(btn.dataset.date));
+    btn.addEventListener('click', () => loadReport(btn.dataset.date).catch(() => {}));
   });
 }
 

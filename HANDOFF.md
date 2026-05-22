@@ -378,6 +378,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
+### 2026-05-22 — Claude — 공개 리포트 URL ↔ 날짜 동기화
+공개 리포트 `/report`가 URL 쿼리 파라미터 `?date=YYYY-MM-DD`를 무시하고 항상 최신 리포트만 띄우는 문제, 날짜 pill을 눌러도 URL이 변하지 않아 책갈피/공유가 불가능한 문제, 그리고 fetch 실패 시 로딩 스피너가 영구 고착되는 문제를 한 번에 정리했다. `loadReports()`가 URL에서 날짜를 읽어 유효하면 그 날짜로 시작하고, `loadReport()`는 매 호출마다 `history.replaceState`로 URL을 갱신한다. 빈 리포트 상태와 단일 날짜 로드 실패도 사용자에게 한국어 안내를 표시한다. node --check, `/report`/`/report/app.js` HTTP 200 확인. 실제 URL 책갈피 동작은 브라우저 클릭 테스트가 필요하므로 운영자 dogfooding에서 확인한다.
+
 ### 2026-05-22 — Claude — API 에러 매핑/fallback 버그 수정
 verify-pipeline은 통과했지만 에러 경로 진단에서 두 가지 잠재 버그를 확인했다. (1) 존재하지 않는 날짜 조회 `/api/reports/2099-01-01`이 ENOENT 그대로 500을 반환했다 → 404로 매핑. (2) Supabase 응답이 비어 있을 때 fallback인 `readAllReports`가 Supabase 요약 객체의 `file: null`을 `path.join`에 넘겨 폭발했다 → `readAllReports`를 로컬 디렉터리 직독으로 단순화. 결과: 미존재 리포트는 404, 미존재 metric은 200+빈 points로 깔끔하게 응답. 재발 방지로 `Verify-Pipeline.ps1`에 음수 경로 두 건(`Invoke-StatusCheck` 헬퍼 추가) 회귀 테스트 추가. node --check + verify-pipeline 전부 통과.
 
@@ -389,9 +392,6 @@ Claude Code best-practice 제안을 검토해 PowerShell 기반 `scripts\verify-
 
 ### 2026-05-22 — Codex — Python 검증 환경 복구와 운영 메시지 정리
 `.venv-docling`을 다시 만들고 `requirements.txt` 기준 `requests/openpyxl/Pillow` 설치. PowerShell 스크립트의 Python 탐지를 실제 `python -c` 실행 성공 기준으로 고쳐 `py.exe`만 있는 상태를 정상 설치로 오인하지 않게 했다. `Check-DailyReportEnvironment.ps1`에 Python/모듈 점검을 추가했고, `validate_daily_data.py`는 UTF-8 BOM JSON을 읽도록 수정. 상태 점검 freshness는 `2026-05-21` OK, 엑셀 커버리지는 mapped 35/extracted 35/missing 0.
-
-### 2026-05-22 — Codex — Admin/공개 리포트 Supabase 우선 조회 보강
-`/api/job-runs`는 최신 Supabase run을 보지만 `/api/reports`가 로컬 processed 파일만 봐서 Admin/공개 리포트가 최신 `2026-05-21`을 표시하지 못하는 문제를 수정. `/api/reports`, `/api/reports/:date`, `/api/history`, `/api/metrics/:metric_key/series`, 코멘트 초안/저장 경로를 Supabase 우선으로 보강했고, 최신 리포트 35개 observations 및 KOSPI series 289포인트 응답을 확인.
 
 ---
 
