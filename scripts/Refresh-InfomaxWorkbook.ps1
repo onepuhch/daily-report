@@ -47,6 +47,37 @@ function Release-ComObject {
     }
 }
 
+function Get-RequiredInfomaxProcesses {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_REQUIRED_PROCESSES"]
+    if ($configured) {
+        return @(
+            $configured -split "," |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { $_ }
+        )
+    }
+
+    return @("infomaxmain", "imxlcommapp")
+}
+
+function Test-InfomaxRunning {
+    param([string[]]$RequiredProcesses)
+
+    $running = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName.ToLowerInvariant() })
+    $missing = @(
+        $RequiredProcesses |
+            Where-Object { $running -notcontains $_.ToLowerInvariant() }
+    )
+
+    if ($missing.Count -gt 0) {
+        $expected = $RequiredProcesses -join ", "
+        $missingText = $missing -join ", "
+        throw "Infomax program is not running or the Excel add-in bridge is unavailable. Missing process(es): $missingText. Start Infomax first, wait until login/data services are ready, then rerun. Expected process(es): $expected."
+    }
+}
+
 $root = Get-ProjectRoot
 $envValues = Read-DotEnv -Path (Join-Path $root ".env")
 
@@ -69,6 +100,12 @@ Write-Host "Workbook: $WorkbookPath"
 Write-Host ""
 
 try {
+    $requiredInfomaxProcesses = Get-RequiredInfomaxProcesses -EnvValues $envValues
+    Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
+    Test-InfomaxRunning -RequiredProcesses $requiredInfomaxProcesses
+    Write-Host "Infomax process check passed."
+    Write-Host ""
+
     $excel = New-Object -ComObject Excel.Application
     $excel.Visible = [bool]$Visible
     $excel.DisplayAlerts = $false

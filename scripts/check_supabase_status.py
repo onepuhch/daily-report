@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,13 @@ def total_from_content_range(content_range: str | None) -> int | None:
     if total == "*":
         return None
     return int(total)
+
+
+def previous_business_day(today: date | None = None) -> date:
+    cursor = (today or date.today()) - timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor -= timedelta(days=1)
+    return cursor
 
 
 def main() -> int:
@@ -72,11 +80,26 @@ def main() -> int:
                 "message": str(exc).split(" failed: ", 1)[-1],
             }
 
+        latest_report = report_rows[0] if report_rows else None
+        latest_report_date = latest_report.get("report_date") if latest_report else None
+        expected_latest = previous_business_day().isoformat()
+        is_current = latest_report_date == expected_latest
+
         payload = {
             "status": "ok",
+            "freshness": {
+                "expected_latest_report_date": expected_latest,
+                "latest_report_date": latest_report_date,
+                "is_current": is_current,
+                "message": (
+                    "Latest report date matches the expected previous business day."
+                    if is_current
+                    else "Latest report date is older than the expected previous business day. Check whether Excel has a complete valid row for the latest date."
+                ),
+            },
             "reports": {
                 "count": total_from_content_range(report_range),
-                "latest": report_rows[0] if report_rows else None,
+                "latest": latest_report,
                 "recent": report_rows,
             },
             "market_observations": {

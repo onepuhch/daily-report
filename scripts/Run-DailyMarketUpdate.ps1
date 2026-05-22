@@ -339,6 +339,13 @@ if ($validationExitCode -ne 0) {
     exit $validationExitCode
 }
 
+$successMessage = "Daily update complete. Latest generated report date: $generatedUntil; requested until: $until."
+if ($generatedUntil -lt $until) {
+    Write-Host ""
+    Write-Host "Freshness warning: latest generated report date is $generatedUntil, but requested until was $until."
+    Write-Host "This usually means the workbook did not contain a complete valid row for the requested latest date."
+}
+
 Record-JobRun `
     -Python $python `
     -Status "success" `
@@ -347,7 +354,7 @@ Record-JobRun `
     -UntilDate $until `
     -UploadedReports $uploadedReports `
     -UploadedObservations $uploadedObservations `
-    -Message "Daily update complete." `
+    -Message $successMessage `
     -LogPath $LogPath
 
 Write-Host ""

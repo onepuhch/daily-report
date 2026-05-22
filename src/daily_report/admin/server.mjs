@@ -1615,6 +1615,7 @@ function summarizeJobLog(job, content) {
   const lower = text.toLowerCase();
   const uploadedMatch = text.match(/"uploaded_reports"\s*:\s*(\d+)\s*,\s*"uploaded_observations"\s*:\s*(\d+)/);
   const reportsMatch = text.match(/"reports"\s*:\s*(\d+)\s*,\s*"from"\s*:\s*"([^"]+)"\s*,\s*"until"\s*:\s*"([^"]+)"/);
+  const freshnessMatch = text.match(/Latest generated report date:\s*(\d{4}-\d{2}-\d{2});\s*requested until:\s*(\d{4}-\d{2}-\d{2})/);
   const validationPass = /"status"\s*:\s*"pass"/.test(text) && /"errors"\s*:\s*\[\]/.test(text);
 
   if (job.status === 'success') {
@@ -1622,6 +1623,21 @@ function summarizeJobLog(job, content) {
     if (reportsMatch) details.push(`처리 기간: ${reportsMatch[2]} ~ ${reportsMatch[3]}`);
     if (uploadedMatch) details.push(`DB 업로드: 리포트 ${uploadedMatch[1]}건, 지표 ${uploadedMatch[2]}건`);
     if (validationPass) details.push('검증 결과: 통과');
+    if (freshnessMatch) details.push(`최신 생성일: ${freshnessMatch[1]} / 요청 종료일: ${freshnessMatch[2]}`);
+
+    if (freshnessMatch && freshnessMatch[1] < freshnessMatch[2]) {
+      return {
+        level: 'warn',
+        title: '자동화는 완료됐지만 최신 보고서 날짜 확인이 필요합니다.',
+        message: `요청 종료일은 ${freshnessMatch[2]}였지만 실제 생성된 최신 보고서는 ${freshnessMatch[1]}입니다. 엑셀 원본에 해당 날짜의 유효한 행이 완성됐는지 확인해야 합니다.`,
+        actions: [
+          'MARKET DAILY.xlsm에서 최신 기준일 행이 채워졌는지 확인',
+          'Admin 데이터/검증 화면에서 최신 보고서 날짜 확인',
+          '엑셀 데이터가 완성된 뒤 Admin 자동화 로그에서 재실행',
+        ],
+        details,
+      };
+    }
 
     return {
       level: 'success',

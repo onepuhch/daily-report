@@ -24,6 +24,12 @@ Market Daily Supabase Upload
 
 자동 실행 결과는 Admin의 `자동화 로그`에서 확인합니다.
 
+중요:
+
+- 인포맥스 프로그램이 먼저 켜져 있어야 엑셀 add-in이 정상 동작합니다.
+- 자동화는 엑셀을 열기 전에 `infomaxmain`, `imxlcommapp` 프로세스를 확인합니다.
+- 둘 중 하나가 없으면 엑셀을 열지 않고 실패 처리하며, Admin 자동화 로그에 인포맥스를 먼저 실행하라는 메시지가 남습니다.
+
 ## Admin 열기
 
 ```text
