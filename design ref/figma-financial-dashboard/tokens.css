@@ -1,0 +1,29 @@
+:root {
+  --figma-canvas: #ffffff;
+  --figma-app-bg: #f1f1ef;
+  --figma-panel-soft: #fafafa;
+  --figma-ink: #404040;
+  --figma-ink-strong: #222222;
+  --figma-muted: #a4a4a4;
+  --figma-muted-light: #c7c7c7;
+  --figma-line: #eeeeee;
+  --figma-primary: #197bbd;
+  --figma-primary-soft: #f0f7ff;
+  --figma-accent: #ffc145;
+  --figma-success: #209d43;
+  --figma-success-bright: #2bc255;
+  --figma-danger: #d92d20;
+  --figma-info: #1570ef;
+  --figma-orange: #ff9f5a;
+  --figma-orange-soft: #ffeada;
+  --figma-green-soft: #ddf9e4;
+  --figma-blue-soft: #e4f0ff;
+  --figma-warning-soft: #fff9e8;
+  --figma-radius-shell: 42px;
+  --figma-radius-card: 18px;
+  --figma-radius-button: 8px;
+  --figma-radius-pill: 999px;
+  --figma-shadow-shell: 0 30px 70px rgba(0,0,0,.10), 0 10px 24px rgba(0,0,0,.05);
+  --figma-shadow-card: 0 18px 28px rgba(0,0,0,.06), 0 2px 7px rgba(0,0,0,.04), 0 0 1px rgba(0,0,0,.05);
+  --figma-shadow-button: 0 8px 18px rgba(25,123,189,.16);
+}

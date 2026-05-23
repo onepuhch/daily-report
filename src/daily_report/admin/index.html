@@ -19,7 +19,7 @@
         <div class="sidebar-section">
           <div class="section-label">Workspace</div>
           <nav class="sidebar-menu" aria-label="admin menu">
-            <button id="dailyReportMenuButton" class="sidebar-menu-item active" type="button" data-menu-view="data">일일 리포트</button>
+            <button id="dailyReportMenuButton" class="sidebar-menu-item active" type="button" data-menu-view="data">데일리 리포트</button>
             <button class="sidebar-menu-item" type="button" disabled>데이터 아카이브</button>
             <button class="sidebar-menu-item" type="button" disabled>리서치 수집</button>
             <button id="jobRunsMenuButton" class="sidebar-menu-item" type="button" data-menu-view="jobs">자동화 로그</button>
@@ -107,20 +107,15 @@
           <section class="data-pane">
             <div class="pane-header">
               <div>
-                <p class="eyebrow">Research</p>
-                <h3>참고 자료</h3>
+                <p class="eyebrow">Source Review</p>
+                <h3>리서치 근거</h3>
               </div>
+              <button id="reloadResearchButton" class="button secondary" type="button">근거 새로고침</button>
             </div>
-            <div class="research-grid">
-              <section class="research-card">
-                <h4>채권 관련 구글 크롤링</h4>
-                <p>뉴스/검색 결과 수집 영역입니다. 자동 수집 연결 전까지는 참고 자료 입력란에 직접 붙여 넣습니다.</p>
-              </section>
-              <section class="research-card">
-                <h4>텔레그램 크롤링</h4>
-                <p>지정 채널 메시지 수집 영역입니다. 연결 후 코멘트 작성 시 근거 자료로 함께 표시합니다.</p>
-              </section>
+            <div id="researchSummary" class="research-summary empty-state">
+              리서치 근거를 불러오는 중입니다.
             </div>
+            <div id="sourceRows" class="source-list"></div>
           </section>
 
           <aside class="comment-pane stepper">
@@ -136,39 +131,37 @@
               </select>
             </div>
             <p id="commentStatusHelp" class="status-help">
-              draft는 임시저장, reviewed는 검토 완료, published는 발행 상태입니다. reviewed/published는 코멘트가 비어 있으면 저장되지 않습니다.
+              reviewed/published 상태는 최종 코멘트 또는 초안 코멘트가 있어야 저장됩니다. AI 초안은 검토용이며 발행은 별도 저장 버튼에서만 실행됩니다.
             </p>
 
             <section class="step-card" data-step="1">
               <header class="step-header">
                 <span class="step-number">1</span>
                 <div>
-                  <h4>참고 자료</h4>
-                  <p>텔레그램, 뉴스, 내부 메모 등 코멘트의 시드 자료를 붙여 넣습니다.</p>
+                  <h4>운영 메모</h4>
+                  <p>텔레그램, 뉴스, 내부 메모 등 코멘트 작성에 반영할 내용을 붙여 넣습니다.</p>
                 </div>
               </header>
               <label class="field">
-                <textarea id="referenceInput" rows="8" placeholder="텔레그램 메시지, 뉴스 기사, 자유 메모 등 코멘트 작성에 참고할 자료를 모두 붙여 넣으세요. URL은 차기 버전에서 자동 파싱 예정입니다."></textarea>
+                <textarea id="referenceInput" rows="8" placeholder="당일 뉴스, 텔레그램 메시지, 내부 메모, 수급 특이사항을 붙여 넣으세요."></textarea>
               </label>
-              <div class="step-actions">
-                <button id="fetchNewsButton" class="button ghost" type="button" disabled title="차기 Phase에서 구현 (D-011)">전일 뉴스 가져오기 (TBD)</button>
-              </div>
             </section>
 
             <section class="step-card" data-step="2">
               <header class="step-header">
                 <span class="step-number">2</span>
                 <div>
-                  <h4>AI 초안 생성</h4>
-                  <p>참고 자료와 오늘 시장 숫자를 바탕으로 초안을 생성합니다.</p>
+                  <h4>초안 생성</h4>
+                  <p>숫자 기반 초안 또는 provider 경계의 AI 보조 초안을 생성합니다.</p>
                 </div>
               </header>
-              <div class="notice notice-warn" role="note">
-                LLM 미연동 — 현재는 숫자 기반 초안. AI provider 결정 후 메모 기반 LLM 초안으로 교체 예정 (D-010).
+              <div id="aiProviderStatus" class="notice notice-info">AI provider 상태를 확인하는 중입니다.</div>
+              <div class="split-actions">
+                <button id="draftButton" class="button secondary" type="button">숫자 기반 초안</button>
+                <button id="aiDraftButton" class="button secondary" type="button">AI 보조 초안</button>
               </div>
-              <button id="draftButton" class="button secondary full-width" type="button">메모 기반 초안 생성</button>
               <label class="field">
-                <textarea id="autoCommentInput" rows="6" placeholder="초안 생성 버튼을 누르면 이 영역에 결과가 표시됩니다. 그대로 다듬어 3단계로 옮기세요."></textarea>
+                <textarea id="autoCommentInput" rows="8" placeholder="초안 결과가 여기에 표시됩니다. 최종 코멘트로 옮기기 전에 검토하세요."></textarea>
               </label>
             </section>
 
@@ -176,12 +169,12 @@
               <header class="step-header">
                 <span class="step-number">3</span>
                 <div>
-                  <h4>최종 작성 & 발행</h4>
-                  <p>초안을 다듬어 실제 리포트에 들어갈 최종 코멘트를 작성합니다.</p>
+                  <h4>최종 작성 및 발행</h4>
+                  <p>실제 리포트에 들어갈 최종 문장을 작성하고 저장합니다.</p>
                 </div>
               </header>
               <label class="field">
-                <textarea id="finalCommentInput" rows="8" placeholder="실제 리포트에 들어갈 최종 문장을 작성합니다."></textarea>
+                <textarea id="finalCommentInput" rows="8" placeholder="최종 발행 문장을 작성합니다."></textarea>
               </label>
               <button id="uploadButton" class="button primary full-width" type="button">저장 및 발행</button>
               <p id="saveMessage" class="save-message" role="status"></p>
@@ -230,9 +223,9 @@
               <button id="reloadJobsButton" class="button secondary" type="button">로그 새로고침</button>
             </div>
           </div>
-          <div id="jobsSummary" class="jobs-summary empty-state">최근 실행 내역을 불러오는 중입니다.</div>
+          <div id="jobsSummary" class="jobs-summary empty-state">최근 실행 이력을 불러오는 중입니다.</div>
           <div class="jobs-help">
-            실패한 실행만 체크한 뒤 선택 항목 재실행을 누르세요. Excel 새로고침이 필요한지, 업로드만 다시 하면 되는지는 실패 메시지를 기준으로 시스템이 자동 판단합니다.
+            실패한 실행만 체크해서 재실행할 수 있습니다. Excel 새로고침이 필요한지, 업로드만 다시 하면 되는지는 실패 메시지를 기준으로 자동 판단합니다.
           </div>
           <div class="table-wrap">
             <table class="jobs-table">

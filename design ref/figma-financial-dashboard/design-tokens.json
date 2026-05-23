@@ -1,0 +1,87 @@
+{
+  "source": {
+    "primaryReference": "https://www.figma.com/design/LGAUvTBtqGA5sd9DDedLhm/Financial-Dashboard--Community-?node-id=0-1&p=f&t=hNNnZ1uwaaiC6yt3-0",
+    "secondaryReference": "https://www.figma.com/design/wrRE9pwYCieHGra4I1NvDQ/Financial-Company-s-Dashboard--Community-?node-id=2-657&p=f&t=ynpu06dtfyrzzVU1-0",
+    "savedAt": "2026-05-23",
+    "notes": "Local screenshots are saved because Figma MCP asset URLs expire and Starter plan tool calls are rate limited."
+  },
+  "screenshots": {
+    "primaryDashboard": "financial-dashboard-main.png",
+    "secondaryTableDashboard": "ecards-dashboard-table.png"
+  },
+  "palette": {
+    "canvas": "#ffffff",
+    "appBackground": "#f1f1ef",
+    "panelSoft": "#fafafa",
+    "ink": "#404040",
+    "inkStrong": "#222222",
+    "muted": "#a4a4a4",
+    "mutedLight": "#c7c7c7",
+    "line": "#eeeeee",
+    "primaryBlue": "#197bbd",
+    "primaryBlueSoft": "#f0f7ff",
+    "cardBlue": "#3998d3",
+    "accentYellow": "#ffc145",
+    "successGreen": "#209d43",
+    "successGreenBright": "#2bc255",
+    "dangerRed": "#d92d20",
+    "infoBlue": "#1570ef",
+    "orange": "#ff9f5a",
+    "orangeSoft": "#ffeada",
+    "greenSoft": "#ddf9e4",
+    "blueSoft": "#e4f0ff",
+    "warningSoft": "#fff9e8"
+  },
+  "typography": {
+    "fontFamily": "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Malgun Gothic, sans-serif",
+    "heroTitle": { "size": "30-44px", "weight": 800, "letterSpacing": "0" },
+    "sectionTitle": { "size": "20px", "weight": 800 },
+    "body": { "size": "13-14px", "weight": 500 },
+    "caption": { "size": "11-12px", "weight": 700 }
+  },
+  "radius": {
+    "shell": "42px",
+    "card": "18px",
+    "button": "6-8px",
+    "input": "10px",
+    "pill": "999px"
+  },
+  "shadow": {
+    "shell": "0 30px 70px rgba(0,0,0,.10), 0 10px 24px rgba(0,0,0,.05)",
+    "card": "0 18px 28px rgba(0,0,0,.06), 0 2px 7px rgba(0,0,0,.04), 0 0 1px rgba(0,0,0,.05)",
+    "primaryButton": "0 8px 18px rgba(25,123,189,.16)",
+    "floatingButton": "0 12px 28px rgba(25,123,189,.28)"
+  },
+  "components": {
+    "sidebar": {
+      "width": "220px desktop, 72px tablet compact",
+      "background": "#ffffff",
+      "activeItem": "#f0f7ff background, #197bbd text",
+      "divider": "1px #eeeeee"
+    },
+    "metricCard": {
+      "background": "#ffffff",
+      "border": "1px #eeeeee",
+      "radius": "18px",
+      "headerHeight": "~92px",
+      "tableRows": "13px 18px padding, #f4f4f4 dividers"
+    },
+    "tickerCard": {
+      "minHeight": "110px",
+      "layout": "label, large value, change badge",
+      "valueColor": "#197bbd"
+    },
+    "buttonPrimary": {
+      "background": "#197bbd",
+      "hover": "#146ba4",
+      "text": "#ffffff",
+      "height": "34-40px",
+      "radius": "6-10px"
+    },
+    "warningComment": {
+      "background": "linear-gradient(135deg, #fff9e8, #fffdf6)",
+      "border": "1px #ffe6a5",
+      "purpose": "final market comment / publish state"
+    }
+  }
+}

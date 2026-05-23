@@ -5,6 +5,8 @@ const state = {
   currentCategory: 'all',
   currentView: 'data',
   validationResult: null,
+  research: null,
+  aiProvider: null,
   jobRuns: [],
   selectedJobRunId: null,
 };
@@ -26,8 +28,13 @@ const els = {
   referenceInput: document.querySelector('#referenceInput'),
   finalCommentInput: document.querySelector('#finalCommentInput'),
   draftButton: document.querySelector('#draftButton'),
+  aiDraftButton: document.querySelector('#aiDraftButton'),
   uploadButton: document.querySelector('#uploadButton'),
   saveMessage: document.querySelector('#saveMessage'),
+  reloadResearchButton: document.querySelector('#reloadResearchButton'),
+  researchSummary: document.querySelector('#researchSummary'),
+  sourceRows: document.querySelector('#sourceRows'),
+  aiProviderStatus: document.querySelector('#aiProviderStatus'),
   dataView: document.querySelector('#dataView'),
   previewView: document.querySelector('#previewView'),
   previewFrame: document.querySelector('#previewFrame'),
@@ -190,6 +197,71 @@ function setCommentForm(comment) {
   els.saveMessage.className = 'save-message';
 }
 
+function renderAiProviderStatus() {
+  if (!els.aiProviderStatus) return;
+  const provider = state.aiProvider;
+  if (!provider) {
+    els.aiProviderStatus.textContent = 'AI provider 상태를 확인하는 중입니다.';
+    return;
+  }
+
+  const fallbackText = provider.fallback_active
+    ? `요청 provider ${provider.requested_provider}가 아직 구현되지 않아 rule_based fallback을 사용 중입니다.`
+    : `현재 provider: ${provider.active_provider}`;
+  els.aiProviderStatus.textContent = `${fallbackText} 초안은 저장 전 운영자 검토가 필요합니다.`;
+}
+
+function renderResearch() {
+  if (!els.researchSummary || !els.sourceRows) return;
+  const research = state.research;
+  if (!research) {
+    els.researchSummary.className = 'research-summary empty-state';
+    els.researchSummary.textContent = '리서치 근거를 불러오는 중입니다.';
+    els.sourceRows.innerHTML = '';
+    return;
+  }
+
+  const summary = research.summary || { count: 0, by_source_type: {}, by_relevance: {} };
+  const sourceTypes = Object.entries(summary.by_source_type || {})
+    .map(([key, count]) => `${key} ${count}`)
+    .join(' · ');
+  const relevance = Object.entries(summary.by_relevance || {})
+    .map(([key, count]) => `${key} ${count}`)
+    .join(' · ');
+
+  els.researchSummary.className = 'research-summary';
+  els.researchSummary.innerHTML = `
+    <strong>${summary.count || 0}개 근거 자료</strong>
+    <span>${escapeHtml(sourceTypes || '아직 수집된 외부 근거 없음')} · ${escapeHtml(relevance || 'relevance 없음')}</span>
+  `;
+
+  const items = research.items || [];
+  if (!items.length) {
+    els.sourceRows.innerHTML = `
+      <div class="source-empty">
+        <strong>수집된 근거 자료가 아직 없습니다.</strong>
+        <p>현재는 운영 메모를 직접 붙여 넣고 AI 초안에 함께 전달합니다. 크롤러가 붙으면 이 영역에 뉴스, 텔레그램, 과거 코멘트 근거가 표시됩니다.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.sourceRows.innerHTML = items.map((item) => `
+    <article class="source-card ${item.included === false ? 'excluded' : ''}">
+      <div>
+        <span class="source-type">${escapeHtml(item.source_type || 'manual_note')}</span>
+        <h4>${escapeHtml(item.title || 'Untitled source')}</h4>
+        <p>${escapeHtml(item.text || item.url || '')}</p>
+      </div>
+      <footer>
+        <span>${escapeHtml(item.relevance || 'medium')}</span>
+        <span>${escapeHtml(item.published_at || item.author || '')}</span>
+        ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">원문</a>` : ''}
+      </footer>
+    </article>
+  `).join('');
+}
+
 function renderReport() {
   const report = state.currentReport;
   if (!report) return;
@@ -206,6 +278,8 @@ function renderReport() {
   renderCategoryTabs();
   renderMetrics();
   clearValidation();
+  renderResearch();
+  renderAiProviderStatus();
 }
 
 function setView(view) {
@@ -292,11 +366,14 @@ function renderValidation(result) {
   const errors = result.errors?.length || 0;
   const summaryClass = errors > 0 ? 'error' : result.status === 'pass' && failed === 0 ? 'ok' : 'warn';
   const summaryText = errors > 0 ? '실패' : failed > 0 ? '차이 확인 필요' : '통과';
+  const sourceText = result.validation_source === 'supabase_fallback'
+    ? 'Supabase 적재 데이터 기준 검증 · Yahoo 대조 생략'
+    : 'Yahoo Finance 대조 완료';
 
   els.validationSummary.className = `validation-summary ${summaryClass}`;
   els.validationSummary.innerHTML = `
     <strong>${escapeHtml(result.report_date)} 검증 ${summaryText}</strong>
-    <span>Yahoo Finance 대조 완료 · 차이 ${failed}개 · 승인 ${approved}개 · 경고 ${warnings}개 · 오류 ${errors}개</span>
+    <span>${escapeHtml(sourceText)} · 차이 ${failed}개 · 승인 ${approved}개 · 경고 ${warnings}개 · 오류 ${errors}개</span>
   `;
 
   if (!checks.length) {
@@ -578,24 +655,91 @@ async function rerunSelectedJob() {
   }
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function readDateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('date');
+  return raw && DATE_PATTERN.test(raw) ? raw : null;
+}
+
+function syncUrlToDate(date) {
+  const params = new URLSearchParams(window.location.search);
+  if (date) {
+    params.set('date', date);
+  } else {
+    params.delete('date');
+  }
+  const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', next);
+}
+
 async function loadReports() {
   const data = await fetchJson('/api/reports');
   state.reports = data.reports || [];
-  state.currentDate = state.currentDate || state.reports[0]?.date || null;
-  renderReportPicker();
 
-  if (state.currentDate) {
-    await loadReport(state.currentDate);
-  } else {
+  if (state.reports.length === 0) {
+    state.currentDate = null;
+    syncUrlToDate(null);
+    renderReportPicker();
     els.reportTitle.textContent = '리포트가 없습니다.';
+    return;
   }
+
+  const urlDate = readDateFromUrl();
+  const knownDates = new Set(state.reports.map((r) => r.date));
+  if (!state.currentDate || !knownDates.has(state.currentDate)) {
+    state.currentDate = urlDate && knownDates.has(urlDate) ? urlDate : state.reports[0].date;
+  }
+  renderReportPicker();
+  await loadReport(state.currentDate);
 }
 
 async function loadReport(date) {
   state.currentDate = date;
   state.currentCategory = 'all';
-  state.currentReport = await fetchJson(`/api/reports/${date}`);
-  renderReport();
+  state.research = null;
+  syncUrlToDate(date);
+  try {
+    state.currentReport = await fetchJson(`/api/reports/${date}`);
+    renderReport();
+    await Promise.allSettled([loadResearch(date), loadAiProviderStatus()]);
+  } catch (error) {
+    els.reportTitle.textContent = `${date} (불러오기 실패)`;
+    els.metricRows.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(date)} 리포트 로드 실패: ${escapeHtml(error.message)}</td></tr>`;
+    throw error;
+  }
+}
+
+async function loadResearch(date = state.currentDate) {
+  if (!date || !els.researchSummary || !els.sourceRows) return;
+  els.researchSummary.className = 'research-summary empty-state';
+  els.researchSummary.textContent = '리서치 근거를 불러오는 중입니다.';
+
+  try {
+    state.research = await fetchJson(`/api/research/${date}`);
+    renderResearch();
+  } catch (error) {
+    state.research = { report_date: date, items: [], summary: { count: 0 } };
+    els.researchSummary.className = 'research-summary error';
+    els.researchSummary.textContent = `리서치 근거 로드 실패: ${error.message}`;
+    els.sourceRows.innerHTML = '';
+  }
+}
+
+async function loadAiProviderStatus() {
+  if (!els.aiProviderStatus) return;
+  try {
+    state.aiProvider = await fetchJson('/api/ai/provider');
+  } catch (error) {
+    state.aiProvider = {
+      active_provider: 'unknown',
+      requested_provider: 'unknown',
+      fallback_active: true,
+      error: error.message,
+    };
+  }
+  renderAiProviderStatus();
 }
 
 function getCommentPayload() {
@@ -641,6 +785,35 @@ async function generateDraft() {
     els.saveMessage.className = 'save-message error';
   } finally {
     els.draftButton.disabled = false;
+  }
+}
+
+async function generateAiDraft() {
+  if (!state.currentDate || !els.aiDraftButton) return;
+
+  els.aiDraftButton.disabled = true;
+  els.saveMessage.textContent = 'AI ?? ??? ???? ????...';
+  els.saveMessage.className = 'save-message';
+
+  try {
+    const result = await fetchJson(`/api/comments/${state.currentDate}/ai-draft`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reference_note: els.referenceInput.value.trim(),
+        research_items: state.research?.items || [],
+      }),
+    });
+
+    els.autoCommentInput.value = result.auto_comment || '';
+    const sourceCount = Array.isArray(result.sources) ? result.sources.length : 0;
+    els.saveMessage.textContent = `AI ?? ??? ??????. provider=${result.ai_provider?.active_provider || 'unknown'}, sources=${sourceCount}.`;
+    els.saveMessage.className = 'save-message ok';
+  } catch (error) {
+    els.saveMessage.textContent = `AI ?? ?? ?? ??: ${error.message}`;
+    els.saveMessage.className = 'save-message error';
+  } finally {
+    els.aiDraftButton.disabled = false;
   }
 }
 
@@ -722,10 +895,12 @@ document.addEventListener('keydown', (event) => {
 });
 els.reportSelect.addEventListener('change', () => {
   if (els.reportSelect.value) {
-    loadReport(els.reportSelect.value);
+    loadReport(els.reportSelect.value).catch(() => {});
   }
 });
 els.draftButton.addEventListener('click', generateDraft);
+els.aiDraftButton?.addEventListener('click', generateAiDraft);
+els.reloadResearchButton?.addEventListener('click', () => loadResearch());
 els.uploadButton.addEventListener('click', uploadToSupabase);
 els.runValidationButton.addEventListener('click', runValidation);
 els.reloadJobsButton.addEventListener('click', loadJobRuns);

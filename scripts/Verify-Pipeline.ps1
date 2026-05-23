@@ -42,6 +42,22 @@ function Invoke-JsonCheck {
   }
 }
 
+
+function Invoke-JsonPostCheck {
+  param(
+    [string]$Name,
+    [string]$Url,
+    [string]$Body
+  )
+
+  try {
+    $response = Invoke-RestMethod -Method Post -Uri $Url -TimeoutSec 20 -ContentType 'application/json; charset=utf-8' -Body $Body
+    Write-Host "[OK] $Name $Url"
+    return $response
+  } catch {
+    throw "[FAIL] $Name $Url - $($_.Exception.Message)"
+  }
+}
 function Invoke-HttpCheck {
   param(
     [string]$Name,
@@ -142,6 +158,10 @@ try {
   Assert-Condition ($health.ok -eq $true) "server did not become healthy within $StartupTimeoutSeconds seconds."
   Write-Host "[OK] health $baseUrl/api/health"
 
+  $provider = Invoke-JsonCheck "AI provider status" "$baseUrl/api/ai/provider"
+  Assert-Condition ($provider.active_provider -eq "rule_based") "AI provider fallback is not active."
+  Assert-Condition ($provider.available_providers -contains "rule_based") "AI provider list is missing rule_based."
+
   $reports = Invoke-JsonCheck "reports" "$baseUrl/api/reports"
   Assert-Condition ($reports.reports.Count -gt 0) "reports list is empty."
   Assert-Condition (-not [string]::IsNullOrWhiteSpace($reports.reports[0].date)) "latest report date is missing."
@@ -162,6 +182,52 @@ try {
 
   Invoke-HttpCheck "admin" "$baseUrl/admin"
   Invoke-HttpCheck "public report" "$baseUrl/report"
+  Invoke-HttpCheck "public report v2" "$baseUrl/report-v2"
+
+  $validation = Invoke-JsonCheck "latest validation" "$baseUrl/api/validation/$latestDate"
+  Assert-Condition ($validation.report_date -eq $latestDate) "validation date does not match latest date."
+  Assert-Condition ($validation.observations -gt 0) "validation observations are empty."
+  Assert-Condition ($validation.status -eq "pass") "latest validation did not pass."
+
+  $research = Invoke-JsonCheck "research items" "$baseUrl/api/research/$latestDate"
+  Assert-Condition ($research.report_date -eq $latestDate) "research date does not match latest date."
+  Assert-Condition ($null -ne $research.summary) "research summary is missing."
+  Assert-Condition ($research.summary.count -ge 0) "research summary count is invalid."
+
+  $draftBody = '{"reference_note":"verify-pipeline non-mutating draft check"}'
+  $draft = Invoke-JsonPostCheck "comment draft" "$baseUrl/api/comments/$latestDate/draft" $draftBody
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($draft.auto_comment)) "comment draft is empty."
+
+  $aiDraftBody = '{"reference_note":"verify-pipeline AI assisted draft check","research_items":[]}'
+  $aiDraft = Invoke-JsonPostCheck "AI assisted comment draft" "$baseUrl/api/comments/$latestDate/ai-draft" $aiDraftBody
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($aiDraft.auto_comment)) "AI assisted comment draft is empty."
+  Assert-Condition ($aiDraft.ai_provider.active_provider -eq "rule_based") "AI assisted draft provider status is missing."
+  Assert-Condition ($null -ne $aiDraft.research_summary) "AI assisted draft research summary is missing."
+
+  $askBody = "{`"question`":`"KOSPI 요약`",`"report_date`":`"$latestDate`"}"
+  $ask = Invoke-JsonPostCheck "AI market answer" "$baseUrl/api/ask" $askBody
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($ask.answer)) "AI answer is empty."
+  Assert-Condition (@($ask.matches).Count -gt 0) "AI answer did not include matched metrics."
+  Assert-Condition ($ask.ai_provider.active_provider -eq "rule_based") "AI answer provider status is missing."
+  Assert-Condition ($null -ne $ask.research_summary) "AI answer research summary is missing."
+  Assert-Condition (@($ask.sources).Count -gt 0) "AI answer sources are missing."
+
+  $jobs = Invoke-JsonCheck "automation job runs" "$baseUrl/api/job-runs?limit=3"
+  Assert-Condition (@($jobs.job_runs).Count -gt 0) "automation job run list is empty."
+  $firstJobId = $jobs.job_runs[0].id
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($firstJobId)) "latest job run id is missing."
+  $jobLog = Invoke-JsonCheck "automation job log" "$baseUrl/api/job-runs/$firstJobId/log"
+  Assert-Condition ($null -ne $jobLog.summary) "job log summary is missing."
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($jobLog.summary.title)) "job log summary title is missing."
+
+  Invoke-StatusCheck "empty reviewed comment blocked" "$baseUrl/api/comments/$latestDate" 400 -Method POST -Body '{"status":"reviewed","auto_comment":"","final_comment":""}'
+  Invoke-StatusCheck "empty published upload blocked" "$baseUrl/api/supabase/reports/$latestDate" 400 -Method POST -Body '{"status":"published","auto_comment":"","final_comment":""}'
+
+  $publishDryRunBody = "{`"status`":`"published`",`"final_comment`":`"verify-pipeline dry-run final comment`",`"approved_by`":`"verify-pipeline`",`"dry_run`":true}"
+  $publishDryRun = Invoke-JsonPostCheck "published upload dry run" "$baseUrl/api/supabase/reports/$latestDate" $publishDryRunBody
+  Assert-Condition ($publishDryRun.dry_run -eq $true) "published dry run flag is missing."
+  Assert-Condition ($publishDryRun.supabase.would_upload -eq $true) "published dry run did not confirm upload readiness."
+  Assert-Condition ($publishDryRun.supabase.observation_count -gt 0) "published dry run observation count is empty."
 
   Invoke-StatusCheck "missing-date detail returns 404" "$baseUrl/api/reports/2099-01-01" 404
   $missingMetric = Invoke-JsonCheck "unknown metric returns empty series" "$baseUrl/api/metrics/__nonexistent_metric__/series"

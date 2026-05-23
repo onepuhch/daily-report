@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { createMarketAiProvider, getAiProviderStatus } from '../ai/llm_provider.mjs';
+import { normalizeResearchItems, summarizeResearchItems } from '../research/research_items.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +15,9 @@ const projectRoot = path.resolve(__dirname, '../../..');
 const processedDir = path.join(projectRoot, 'data', 'processed');
 const outputDir = path.join(projectRoot, 'output');
 const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
+const reportV2Dir = path.join(projectRoot, 'src', 'daily_report', 'report_v2');
 const logsDir = path.join(projectRoot, 'data', 'logs');
+const researchDir = path.join(projectRoot, 'data', 'research');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
 const execFileAsync = promisify(execFile);
 
@@ -1407,52 +1411,33 @@ async function getLatestReportDate() {
   return reports[0]?.date || null;
 }
 
-function normalizeSearchText(value) {
-  return String(value || '').toLowerCase().replace(/\s+/g, '');
-}
-
-function scoreObservation(item, question) {
-  const text = normalizeSearchText([
-    item.metric_name,
-    item.metric_key,
-    item.category,
-    item.category_label,
-    item.unit,
-  ].join(' '));
-  const query = normalizeSearchText(question);
-  let score = 0;
-
-  if (query && text.includes(query)) score += 8;
-  for (const token of query.match(/[a-z0-9가-힣]+/g) || []) {
-    if (token.length >= 2 && text.includes(token)) score += 3;
+async function readResearchItems(date) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date');
+    error.statusCode = 400;
+    throw error;
   }
 
-  const categoryHints = [
-    ['금리', ['domestic_rates', 'global_rates', 'credit']],
-    ['국채', ['domestic_rates', 'global_rates']],
-    ['크레딧', ['credit']],
-    ['주식', ['domestic_equities_fx', 'global_equities']],
-    ['코스피', ['domestic_equities_fx']],
-    ['나스닥', ['global_equities']],
-    ['환율', ['fx']],
-    ['달러', ['fx']],
-    ['원달러', ['fx']],
-    ['암호', ['crypto']],
-    ['비트', ['crypto']],
-    ['상품', ['commodities']],
-    ['유가', ['commodities']],
-    ['금값', ['commodities']],
-  ];
-
-  for (const [keyword, categories] of categoryHints) {
-    if (question.includes(keyword) && categories.includes(item.category)) score += 2;
+  const researchPath = path.join(researchDir, `research_${date}.json`);
+  try {
+    const raw = await readFile(researchPath, 'utf8');
+    const parsed = parseJson(raw);
+    const items = Array.isArray(parsed) ? parsed : parsed.items;
+    return normalizeResearchItems(items, { report_date: date });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
   }
-
-  return score;
 }
 
-function observationToAnswerLine(item) {
-  return `${item.metric_name}: ${formatNumber(item.value)}${item.unit || ''}, 전일대비 ${formatChangeText(item.change_1d, item.change_1d_unit)}, 작년말대비 ${formatChangeText(item.change_ytd, item.change_ytd_unit)}`;
+async function buildResearchContext(date, payload = {}) {
+  const storedItems = await readResearchItems(date);
+  const requestItems = normalizeResearchItems(payload.research_items, { report_date: date });
+  const items = [...storedItems, ...requestItems].filter((item) => item.included !== false);
+  return {
+    items,
+    summary: summarizeResearchItems(items),
+  };
 }
 
 async function answerMarketQuestion(payload = {}) {
@@ -1464,37 +1449,31 @@ async function answerMarketQuestion(payload = {}) {
   }
 
   if (!date || !isDate(date)) {
-    const error = new Error('질문할 리포트 날짜를 찾지 못했습니다.');
+    const error = new Error('Question requires a valid report date.');
     error.statusCode = 400;
     throw error;
   }
 
   const report = await readReport(date);
-  const observations = report.observations || [];
-  const scored = observations
-    .map((item) => ({ item, score: scoreObservation(item, question) }))
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
-    .map((row) => row.item);
-
-  const matches = scored.length > 0 ? scored : observations.slice(0, 8);
-  const commentText = report.comment?.final_comment || report.comment?.auto_comment || '';
-  const intro = question
-    ? `${date} 리포트에서 "${question}"와 관련된 지표를 찾았습니다.`
-    : `${date} 리포트의 주요 지표입니다.`;
-  const lines = matches.map(observationToAnswerLine);
-  const commentLine = commentText
-    ? `저장된 코멘트 요약: ${commentText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0]}`
-    : '저장된 최종 코멘트는 아직 없습니다.';
+  const research = await buildResearchContext(date, payload);
+  const provider = createMarketAiProvider();
+  const context = {
+    ...payload,
+    question,
+    report_date: date,
+    report,
+    report_comment: payload.report_comment || report.comment || {},
+    research_items: research.items,
+    research_summary: research.summary,
+  };
+  const answer = await provider.generateAnswer(context, [{ role: 'user', content: question }]);
 
   return {
+    ...answer,
     report_date: date,
     question,
-    answer: [intro, ...lines, commentLine].join('\n'),
-    matches,
-    source: 'local_report_json',
-    mode: 'rule_based_search',
+    ai_provider: getAiProviderStatus(),
+    research_summary: research.summary,
   };
 }
 
@@ -1623,6 +1602,43 @@ async function generateCommentDraft(date, payload = {}) {
   };
 }
 
+async function generateAiCommentDraft(date, payload = {}) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const referenceNote = String(payload.reference_note || '').trim();
+  const question = [
+    'Create an operator-review draft comment for today market daily report.',
+    'Summarize rates, equities, FX, commodities, and key risk points.',
+    'Use only the provided report data and research items.',
+    referenceNote ? `Operator memo: ${referenceNote}` : '',
+  ].filter(Boolean).join('\n');
+
+  const answer = await answerMarketQuestion({
+    ...payload,
+    question,
+    report_date: date,
+    surface: 'admin',
+    mode: 'assisted_draft',
+  });
+
+  return {
+    report_date: date,
+    auto_comment: answer.answer || '',
+    generated_at: new Date().toISOString(),
+    ai_provider: answer.ai_provider,
+    sources: answer.sources || [],
+    research_summary: answer.research_summary || summarizeResearchItems([]),
+    safety: answer.safety || {
+      uses_only_available_context: true,
+      needs_operator_review: true,
+    },
+  };
+}
+
 function normalizeCommentPayload(date, payload) {
   return {
     report_date: date,
@@ -1633,6 +1649,36 @@ function normalizeCommentPayload(date, payload) {
     approved_by: payload.approved_by || '',
     status: normalizeStatus(payload.status),
     updated_at: new Date().toISOString(),
+  };
+}
+
+async function previewSupabaseReportComment(date, payload) {
+  validateCommentForStatus(payload);
+
+  const row = await getReportRowByDate(date);
+  if (!row?.id) {
+    const error = new Error(`Supabase report row missing for ${date}.`);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const normalized = normalizeCommentPayload(date, payload);
+  const report = await readSupabaseReport(date);
+  return {
+    dry_run: true,
+    comment: normalized,
+    sql: buildCommentSql(date, normalized),
+    sql_file: null,
+    comment_file: null,
+    review_html: report?.preview_html || null,
+    supabase: {
+      uploaded: false,
+      would_upload: true,
+      report_id: row.id,
+      report_date: date,
+      observation_count: report?.observations?.length || 0,
+      status: normalized.status,
+    },
   };
 }
 
@@ -1680,6 +1726,8 @@ async function updateSupabaseReportComment(date, payload) {
 }
 
 async function uploadReportToSupabase(date, payload) {
+  if (payload?.dry_run) return previewSupabaseReportComment(date, payload);
+
   const updatedExisting = await updateSupabaseReportComment(date, payload);
   if (updatedExisting) return updatedExisting;
 
@@ -1750,6 +1798,59 @@ async function uploadReportToSupabase(date, payload) {
   };
 }
 
+const validationRequiredMetricKeys = ['kospi', 'usdkrw', 'wti', 'us_treasury_10y'];
+
+function isMissingLocalReportJson(result) {
+  return (result?.errors || []).some((message) => String(message).includes('Report JSON not found'));
+}
+
+function isFiniteValidationNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+async function validateSupabaseLoadedReport(date, cause = '') {
+  const report = await readSupabaseReport(date);
+  const observations = report?.observations || [];
+  const byMetric = new Map(observations.map((item) => [item.metric_key, item]));
+  const errors = [];
+  const warnings = [];
+
+  if (!report) {
+    errors.push(`Supabase report row missing for ${date}.`);
+  }
+  if (!observations.length) {
+    errors.push(`Supabase observations missing for ${date}.`);
+  }
+
+  for (const key of validationRequiredMetricKeys) {
+    const item = byMetric.get(key);
+    if (!item) {
+      errors.push(`Missing critical metric: ${key}.`);
+      continue;
+    }
+    if (!isFiniteValidationNumber(item.value)) {
+      errors.push(`Critical metric has invalid value: ${key}=${item.value}.`);
+    }
+  }
+
+  if (cause) {
+    const detail = String(cause).replace('Report JSON not found: ', 'Target file: ');
+    warnings.push(`Local processed JSON is missing; validated against Supabase-loaded data. ${detail}`.trim());
+  } else {
+    warnings.push('Local processed JSON is missing; validated against Supabase-loaded data.');
+  }
+  warnings.push('Yahoo Finance cross-check was skipped in fallback validation because it requires local processed JSON output.');
+
+  return {
+    report_date: date,
+    observations: observations.length,
+    status: errors.length ? 'fail' : 'pass',
+    errors,
+    warnings,
+    cross_checks: [],
+    validation_source: 'supabase_fallback',
+  };
+}
 async function validateReport(date) {
   if (!isDate(date)) {
     const error = new Error('Invalid report date.');
@@ -1779,19 +1880,26 @@ async function validateReport(date) {
     const stdout = error.stdout ? String(error.stdout) : '';
     if (stdout.trim()) {
       try {
-        return await attachValidationApprovals(date, parseJson(stdout));
+        const parsed = parseJson(stdout);
+        if (isMissingLocalReportJson(parsed)) {
+          return await attachValidationApprovals(date, await validateSupabaseLoadedReport(date, parsed.errors[0]));
+        }
+        return await attachValidationApprovals(date, parsed);
       } catch {
         // Fall through to the process error below.
       }
     }
 
     const stderr = error.stderr ? String(error.stderr).trim() : '';
-    const wrapped = new Error(stderr || error.message || 'Validation failed.');
+    const message = stderr || error.message || 'Validation failed.';
+    if (String(message).includes('Report JSON not found')) {
+      return await attachValidationApprovals(date, await validateSupabaseLoadedReport(date, message));
+    }
+    const wrapped = new Error(message);
     wrapped.statusCode = 500;
     throw wrapped;
   }
 }
-
 async function getValidationApprovals(date) {
   const report = await getReportRowByDate(date);
   if (!report?.id) return [];
@@ -1858,7 +1966,7 @@ async function approveValidation(date, payload = {}) {
     symbol: payload.symbol || null,
     db_value: payload.db_value ?? null,
     external_value: payload.external_value ?? null,
-    reason: payload.reason || '운영자가 검증 차이를 확인하고 DB 값을 승인했습니다.',
+    reason: payload.reason || 'Operator reviewed the validation difference and approved the DB value.',
     approved_by: payload.approved_by || null,
     approved_at: new Date().toISOString(),
   };
@@ -2215,8 +2323,8 @@ async function startSelectedJobRerun(id) {
     report_until: job.report_until,
     log_path: logPath,
     message: mode === 'upload_only'
-      ? '선택한 실패 건의 데이터 검증/DB 업로드 재실행을 시작했습니다.'
-      : '선택한 실패 건의 Excel 새로고침 포함 재실행을 시작했습니다.',
+      ? 'Started rerun for the selected failed job: validation and DB upload only.'
+      : 'Started rerun for the selected failed job including Excel refresh.',
   };
 }
 
@@ -2227,10 +2335,14 @@ async function serveStatic(res, requestPath) {
     filePath = path.join(__dirname, 'index.html');
   } else if (requestPath === '/report') {
     filePath = path.join(reportDir, 'index.html');
+  } else if (requestPath === '/report-v2') {
+    filePath = path.join(reportV2Dir, 'index.html');
   } else if (requestPath === '/reports' || requestPath === '/archive') {
     filePath = path.join(__dirname, 'archive.html');
   } else if (requestPath.startsWith('/admin/')) {
     filePath = path.join(__dirname, requestPath.replace('/admin/', ''));
+  } else if (requestPath.startsWith('/report-v2/')) {
+    filePath = path.join(reportV2Dir, requestPath.replace('/report-v2/', ''));
   } else if (requestPath.startsWith('/report/')) {
     filePath = path.join(reportDir, requestPath.replace('/report/', ''));
   } else if (requestPath.startsWith('/output/')) {
@@ -2242,9 +2354,10 @@ async function serveStatic(res, requestPath) {
   const resolved = path.resolve(filePath);
   const allowedAdmin = resolved.startsWith(__dirname);
   const allowedReport = resolved.startsWith(reportDir);
+  const allowedReportV2 = resolved.startsWith(reportV2Dir);
   const allowedOutput = resolved.startsWith(outputDir);
 
-  if (!allowedAdmin && !allowedReport && !allowedOutput) {
+  if (!allowedAdmin && !allowedReport && !allowedReportV2 && !allowedOutput) {
     sendText(res, 403, 'Forbidden');
     return true;
   }
@@ -2275,6 +2388,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestPath === '/api/ai/provider') {
+      sendJson(res, 200, getAiProviderStatus());
+      return;
+    }
+
     if (req.method === 'GET' && requestPath === '/api/reports') {
       sendJson(res, 200, { reports: await getReportFiles() });
       return;
@@ -2294,6 +2412,17 @@ const server = createServer(async (req, res) => {
     const jobRunLogMatch = requestPath.match(/^\/api\/job-runs\/([^/]+)\/log$/);
     if (req.method === 'GET' && jobRunLogMatch) {
       sendJson(res, 200, await getJobRunLog(decodeURIComponent(jobRunLogMatch[1])));
+      return;
+    }
+
+    const researchMatch = requestPath.match(/^\/api\/research\/(\d{4}-\d{2}-\d{2})$/);
+    if (req.method === 'GET' && researchMatch) {
+      const items = await readResearchItems(researchMatch[1]);
+      sendJson(res, 200, {
+        report_date: researchMatch[1],
+        items,
+        summary: summarizeResearchItems(items),
+      });
       return;
     }
 
@@ -2337,6 +2466,13 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && draftMatch) {
       const body = await readBody(req);
       sendJson(res, 200, await generateCommentDraft(draftMatch[1], body));
+      return;
+    }
+
+    const aiDraftMatch = requestPath.match(/^\/api\/comments\/(\d{4}-\d{2}-\d{2})\/ai-draft$/);
+    if (req.method === 'POST' && aiDraftMatch) {
+      const body = await readBody(req);
+      sendJson(res, 200, await generateAiCommentDraft(aiDraftMatch[1], body));
       return;
     }
 

@@ -53,6 +53,17 @@ http://127.0.0.1:4173/admin
 http://127.0.0.1:4173/report
 ```
 
+# 2026-05-23 Admin AI Draft Update
+
+The Admin comment tab now has two draft paths:
+
+- `?? ?? ??`: deterministic fallback based on report observations.
+- `AI ?? ??`: calls `/api/comments/{date}/ai-draft` through the provider boundary and includes current research context. It does not save or publish anything by itself.
+
+Research sources appear in the Admin source review panel. Until crawlers are connected, this panel may show zero collected sources and the operator memo remains the manual source input.
+
+
+
 ## Python 환경 확인
 
 상태 점검, 데이터 검증, 엑셀 커버리지 점검, Supabase 업로드는 Python 3가 필요합니다.
@@ -87,6 +98,15 @@ Supabase 접속이 막히면 Python 오류 전체 대신 짧은 JSON 오류와 `
 ## 데이터 검증
 
 ```text
+# 2026-05-23 Admin AI Draft Update
+
+The Admin comment tab now has two draft paths:
+
+- `숫자 기반 초안`: deterministic fallback based on report observations.
+- `AI 보조 초안`: calls `/api/comments/{date}/ai-draft` through the provider boundary and includes current research context. It does not save or publish anything by itself.
+
+Research sources appear in the Admin source review panel. Until crawlers are connected, this panel may show zero collected sources and the operator memo remains the manual source input.
+
 scripts\09_validate_daily_data.cmd
 ```
 
@@ -136,6 +156,30 @@ scripts\08_manual_reupload.cmd
 powershell -ExecutionPolicy Bypass -File scripts\Run-ManualReupload.ps1 -SkipRefresh
 ```
 
+
+## 최종 준비 상태 확인
+
+사용자에게 화면 최종 확인을 요청하기 전에는 아래 명령을 먼저 실행합니다.
+
+```text
+scripts\verify-pipeline.cmd
+```
+
+이 명령은 비파괴 smoke test입니다. 리포트를 발행하거나 Supabase 코멘트를 바꾸지 않고 다음을 확인합니다.
+
+- Admin, 기존 공개 리포트, V2 공개 리포트 HTTP 200
+- 최신 리포트 데이터와 35개 지표 로드
+- 최신 검증 통과
+- 코멘트 초안 생성
+- 빈 코멘트의 reviewed/published 저장 차단
+- AI 시장 답변 기본 응답
+- 자동화 로그 목록과 로그 요약
+
+V2 공개 리포트 화면:
+
+```text
+http://127.0.0.1:4173/report-v2
+```
 ## 오류 전달 기준
 
 해결이 안 되면 아래 3가지를 전달합니다.
