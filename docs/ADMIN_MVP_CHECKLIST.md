@@ -25,10 +25,10 @@ MVP target:
 
 Data coverage note:
 
-- `scripts\check_excel_coverage.py` confirms 35 mapped metrics and 0 missing mapped metrics on the local workbook cache.
-- The 2026-05-22 rerun used the local `2025-12-23` workbook/cache and found 35 extracted observations with 0 Python/PowerShell mapping mismatches.
+- `scripts\check_excel_coverage.py` confirms 50 mapped metrics and 0 missing mapped metrics on the local workbook cache.
+- The 2026-05-25 rerun used the local `2025-12-23` workbook/cache and found 50 extracted observations with 0 Python/PowerShell mapping mismatches.
 - Admin/API smoke verification now uses Supabase latest `2026-05-21` and passes with 35 observations.
-- Investor-flow and MMF workbook sheets are detected but classified as deferred scope, not current daily-report MVP omissions.
+- Investor-flow workbook sheets are mapped locally, but Supabase latest still needs a refreshed upload before those rows appear in Admin/API. MMF workbook sheets remain deferred scope.
 
 
 2026-05-23 note:

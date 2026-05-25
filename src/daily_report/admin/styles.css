@@ -687,6 +687,35 @@ select {
   color: var(--up);
 }
 
+.draft-trace {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.draft-trace strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.draft-trace.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.draft-trace.error {
+  background: #fef3f2;
+  border-color: #fecaca;
+  color: var(--error);
+}
+
 .status-help {
   color: var(--muted);
   font-size: 12px;
@@ -793,6 +822,48 @@ select {
   color: var(--error);
 }
 
+.research-form {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 1fr) 140px 110px;
+}
+
+.research-form select {
+  width: 100%;
+}
+
+.research-actions {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 120px 120px minmax(0, 1fr);
+}
+
+.research-actions .button.primary {
+  width: auto;
+}
+
+.text-button {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.text-button:hover {
+  color: var(--accent-hover);
+}
+
 .source-list {
   display: grid;
   gap: 10px;
@@ -877,6 +948,16 @@ select {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 1fr;
+}
+
+.draft-copy-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.draft-copy-row .button {
+  width: auto;
 }
 
 .research-card {
@@ -1562,8 +1643,20 @@ body.jobs-mode #workspaceTabs {
   }
 
   .summary-strip,
-  .inline-fields {
+  .inline-fields,
+  .form-grid,
+  .split-actions,
+  .research-actions {
     grid-template-columns: 1fr;
+  }
+
+  .draft-copy-row {
+    display: block;
+  }
+
+  .draft-copy-row .button,
+  .research-actions .button {
+    width: 100%;
   }
 
   .summary-strip > div {

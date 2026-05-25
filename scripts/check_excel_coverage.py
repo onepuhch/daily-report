@@ -16,8 +16,6 @@ from import_historical_market_data import METRICS, build_report, collect_rows, r
 
 
 EXCLUDED_SHEETS = {
-    "선물투자자별순매수금액": "investor_flow_deferred",
-    "주식투자자별순매수금액": "investor_flow_deferred",
     "국공채형MMF": "mmf_deferred",
     "일반형MMF": "mmf_deferred",
 }

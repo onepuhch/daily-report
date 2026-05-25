@@ -115,6 +115,46 @@
             <div id="researchSummary" class="research-summary empty-state">
               리서치 근거를 불러오는 중입니다.
             </div>
+            <form id="researchForm" class="research-form">
+              <div class="form-grid">
+                <label class="field">
+                  <span>제목</span>
+                  <input id="researchTitleInput" type="text" placeholder="예: 금리 상승 배경 메모">
+                </label>
+                <label class="field">
+                  <span>유형</span>
+                  <select id="researchTypeInput">
+                    <option value="manual_note">운영 메모</option>
+                    <option value="google_news">뉴스</option>
+                    <option value="telegram">텔레그램</option>
+                    <option value="historical_comment">과거 코멘트</option>
+                    <option value="bond_market_note">채권시장 메모</option>
+                    <option value="market_data_note">시장 데이터 메모</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>중요도</span>
+                  <select id="researchRelevanceInput">
+                    <option value="medium">보통</option>
+                    <option value="high">높음</option>
+                    <option value="low">낮음</option>
+                  </select>
+                </label>
+              </div>
+              <label class="field">
+                <span>내용</span>
+                <textarea id="researchTextInput" rows="3" placeholder="AI 초안에 반영할 근거나 운용자 판단 메모를 입력합니다."></textarea>
+              </label>
+              <label class="field">
+                <span>URL</span>
+                <input id="researchUrlInput" type="url" placeholder="https://...">
+              </label>
+              <div class="research-actions">
+                <button id="addResearchButton" class="button secondary" type="button">근거 추가</button>
+                <button id="saveResearchButton" class="button primary" type="button">근거 저장</button>
+                <span id="researchSaveMessage" class="save-message"></span>
+              </div>
+            </form>
             <div id="sourceRows" class="source-list"></div>
           </section>
 
@@ -163,6 +203,12 @@
               <label class="field">
                 <textarea id="autoCommentInput" rows="8" placeholder="초안 결과가 여기에 표시됩니다. 최종 코멘트로 옮기기 전에 검토하세요."></textarea>
               </label>
+              <div class="draft-copy-row">
+                <button id="copyDraftButton" class="button secondary" type="button">초안을 최종 코멘트로 복사</button>
+              </div>
+              <div id="aiDraftTrace" class="draft-trace empty-state">
+                AI 보조 초안을 생성하면 provider와 반영된 근거가 여기에 표시됩니다.
+              </div>
             </section>
 
             <section class="step-card" data-step="3">

@@ -25,15 +25,25 @@ const els = {
   metricRows: document.querySelector('#metricRows'),
   statusInput: document.querySelector('#statusInput'),
   autoCommentInput: document.querySelector('#autoCommentInput'),
+  aiDraftTrace: document.querySelector('#aiDraftTrace'),
   referenceInput: document.querySelector('#referenceInput'),
   finalCommentInput: document.querySelector('#finalCommentInput'),
   draftButton: document.querySelector('#draftButton'),
   aiDraftButton: document.querySelector('#aiDraftButton'),
+  copyDraftButton: document.querySelector('#copyDraftButton'),
   uploadButton: document.querySelector('#uploadButton'),
   saveMessage: document.querySelector('#saveMessage'),
   reloadResearchButton: document.querySelector('#reloadResearchButton'),
   researchSummary: document.querySelector('#researchSummary'),
   sourceRows: document.querySelector('#sourceRows'),
+  researchTitleInput: document.querySelector('#researchTitleInput'),
+  researchTypeInput: document.querySelector('#researchTypeInput'),
+  researchRelevanceInput: document.querySelector('#researchRelevanceInput'),
+  researchTextInput: document.querySelector('#researchTextInput'),
+  researchUrlInput: document.querySelector('#researchUrlInput'),
+  addResearchButton: document.querySelector('#addResearchButton'),
+  saveResearchButton: document.querySelector('#saveResearchButton'),
+  researchSaveMessage: document.querySelector('#researchSaveMessage'),
   aiProviderStatus: document.querySelector('#aiProviderStatus'),
   dataView: document.querySelector('#dataView'),
   previewView: document.querySelector('#previewView'),
@@ -195,6 +205,10 @@ function setCommentForm(comment) {
   els.statusInput.value = comment?.status || 'draft';
   els.saveMessage.textContent = '';
   els.saveMessage.className = 'save-message';
+  if (els.aiDraftTrace) {
+    els.aiDraftTrace.className = 'draft-trace empty-state';
+    els.aiDraftTrace.textContent = 'AI 보조 초안을 생성하면 provider와 반영된 근거가 여기에 표시됩니다.';
+  }
 }
 
 function renderAiProviderStatus() {
@@ -224,15 +238,15 @@ function renderResearch() {
   const summary = research.summary || { count: 0, by_source_type: {}, by_relevance: {} };
   const sourceTypes = Object.entries(summary.by_source_type || {})
     .map(([key, count]) => `${key} ${count}`)
-    .join(' · ');
+    .join(' / ');
   const relevance = Object.entries(summary.by_relevance || {})
     .map(([key, count]) => `${key} ${count}`)
-    .join(' · ');
+    .join(' / ');
 
   els.researchSummary.className = 'research-summary';
   els.researchSummary.innerHTML = `
     <strong>${summary.count || 0}개 근거 자료</strong>
-    <span>${escapeHtml(sourceTypes || '아직 수집된 외부 근거 없음')} · ${escapeHtml(relevance || 'relevance 없음')}</span>
+    <span>${escapeHtml(sourceTypes || '아직 수집된 외부 근거 없음')} / ${escapeHtml(relevance || 'relevance 없음')}</span>
   `;
 
   const items = research.items || [];
@@ -246,7 +260,7 @@ function renderResearch() {
     return;
   }
 
-  els.sourceRows.innerHTML = items.map((item) => `
+  els.sourceRows.innerHTML = items.map((item, index) => `
     <article class="source-card ${item.included === false ? 'excluded' : ''}">
       <div>
         <span class="source-type">${escapeHtml(item.source_type || 'manual_note')}</span>
@@ -257,6 +271,12 @@ function renderResearch() {
         <span>${escapeHtml(item.relevance || 'medium')}</span>
         <span>${escapeHtml(item.published_at || item.author || '')}</span>
         ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">원문</a>` : ''}
+        <button class="text-button source-toggle" type="button" data-source-index="${index}">
+          ${item.included === false ? '포함' : '제외'}
+        </button>
+        <button class="text-button source-delete" type="button" data-source-index="${index}">
+          삭제
+        </button>
       </footer>
     </article>
   `).join('');
@@ -742,6 +762,129 @@ async function loadAiProviderStatus() {
   renderAiProviderStatus();
 }
 
+function summarizeLocalResearch(items = []) {
+  const includedItems = items.filter((item) => item.included !== false);
+  const bySourceType = {};
+  const byRelevance = {};
+
+  includedItems.forEach((item) => {
+    const sourceType = item.source_type || 'manual_note';
+    const relevance = item.relevance || 'medium';
+    bySourceType[sourceType] = (bySourceType[sourceType] || 0) + 1;
+    byRelevance[relevance] = (byRelevance[relevance] || 0) + 1;
+  });
+
+  return {
+    count: includedItems.length,
+    by_source_type: bySourceType,
+    by_relevance: byRelevance,
+    has_high_relevance: includedItems.some((item) => item.relevance === 'high'),
+  };
+}
+
+function updateResearchState(items) {
+  state.research = {
+    report_date: state.currentDate,
+    items,
+    summary: summarizeLocalResearch(items),
+  };
+  renderResearch();
+}
+
+function clearResearchForm() {
+  if (els.researchTitleInput) els.researchTitleInput.value = '';
+  if (els.researchTextInput) els.researchTextInput.value = '';
+  if (els.researchUrlInput) els.researchUrlInput.value = '';
+  if (els.researchTypeInput) els.researchTypeInput.value = 'manual_note';
+  if (els.researchRelevanceInput) els.researchRelevanceInput.value = 'medium';
+}
+
+function addResearchItem() {
+  if (!state.currentDate || !els.researchTitleInput || !els.researchTextInput) return;
+
+  const title = els.researchTitleInput.value.trim();
+  const text = els.researchTextInput.value.trim();
+  const url = els.researchUrlInput?.value.trim() || '';
+
+  if (!title && !text && !url) {
+    if (els.researchSaveMessage) {
+      els.researchSaveMessage.textContent = '제목, 내용, URL 중 하나는 입력해야 합니다.';
+      els.researchSaveMessage.className = 'save-message error';
+    }
+    return;
+  }
+
+  const items = [...(state.research?.items || []), {
+    report_date: state.currentDate,
+    source_type: els.researchTypeInput?.value || 'manual_note',
+    title: title || url || text.slice(0, 60) || '운영 메모',
+    url,
+    published_at: '',
+    author: '',
+    text,
+    relevance: els.researchRelevanceInput?.value || 'medium',
+    included: true,
+  }];
+
+  updateResearchState(items);
+  clearResearchForm();
+  if (els.researchSaveMessage) {
+    els.researchSaveMessage.textContent = '근거가 임시 추가되었습니다. 저장을 눌러 파일에 반영하세요.';
+    els.researchSaveMessage.className = 'save-message';
+  }
+}
+
+async function saveResearch() {
+  if (!state.currentDate || !els.saveResearchButton) return;
+
+  els.saveResearchButton.disabled = true;
+  if (els.researchSaveMessage) {
+    els.researchSaveMessage.textContent = '근거를 저장하는 중입니다...';
+    els.researchSaveMessage.className = 'save-message';
+  }
+
+  try {
+    state.research = await fetchJson(`/api/research/${state.currentDate}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items: state.research?.items || [] }),
+    });
+    renderResearch();
+    if (els.researchSaveMessage) {
+      els.researchSaveMessage.textContent = '근거가 저장되었습니다.';
+      els.researchSaveMessage.className = 'save-message ok';
+    }
+  } catch (error) {
+    if (els.researchSaveMessage) {
+      els.researchSaveMessage.textContent = `근거 저장 실패: ${error.message}`;
+      els.researchSaveMessage.className = 'save-message error';
+    }
+  } finally {
+    els.saveResearchButton.disabled = false;
+  }
+}
+
+function handleSourceAction(event) {
+  const button = event.target.closest('[data-source-index]');
+  if (!button || !state.research) return;
+
+  const index = Number(button.dataset.sourceIndex);
+  const items = [...(state.research.items || [])];
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) return;
+
+  if (button.classList.contains('source-delete')) {
+    items.splice(index, 1);
+  } else if (button.classList.contains('source-toggle')) {
+    items[index] = { ...items[index], included: items[index].included === false };
+  }
+
+  updateResearchState(items);
+  if (els.researchSaveMessage) {
+    els.researchSaveMessage.textContent = '근거 변경 사항이 있습니다. 저장을 눌러 파일에 반영하세요.';
+    els.researchSaveMessage.className = 'save-message';
+  }
+}
+
 function getCommentPayload() {
   return {
     auto_comment: els.autoCommentInput.value.trim(),
@@ -792,29 +935,74 @@ async function generateAiDraft() {
   if (!state.currentDate || !els.aiDraftButton) return;
 
   els.aiDraftButton.disabled = true;
-  els.saveMessage.textContent = 'AI ?? ??? ???? ????...';
+  els.saveMessage.textContent = 'AI 보조 초안을 생성하는 중입니다...';
   els.saveMessage.className = 'save-message';
+  if (els.aiDraftTrace) {
+    els.aiDraftTrace.className = 'draft-trace';
+    els.aiDraftTrace.textContent = 'provider 응답과 근거 trace를 기다리는 중입니다...';
+  }
 
   try {
+    const includedResearchItems = (state.research?.items || []).filter((item) => item.included !== false);
     const result = await fetchJson(`/api/comments/${state.currentDate}/ai-draft`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         reference_note: els.referenceInput.value.trim(),
-        research_items: state.research?.items || [],
+        research_items: includedResearchItems,
       }),
     });
 
     els.autoCommentInput.value = result.auto_comment || '';
     const sourceCount = Array.isArray(result.sources) ? result.sources.length : 0;
-    els.saveMessage.textContent = `AI ?? ??? ??????. provider=${result.ai_provider?.active_provider || 'unknown'}, sources=${sourceCount}.`;
+    const provider = result.ai_provider?.active_provider || result.ai_provider?.provider || 'unknown';
+    const sourceLabels = (result.sources || [])
+      .slice(0, 5)
+      .map((source) => source.label || source.metric_key || source.source_type)
+      .filter(Boolean);
+    els.saveMessage.textContent = `AI 보조 초안을 생성했습니다. provider=${provider}, sources=${sourceCount}.`;
     els.saveMessage.className = 'save-message ok';
+    if (els.aiDraftTrace) {
+      els.aiDraftTrace.className = 'draft-trace ok';
+      els.aiDraftTrace.innerHTML = `
+        <strong>AI draft trace</strong>
+        <span>provider: ${escapeHtml(provider)}</span>
+        <span>included research: ${includedResearchItems.length}개 / returned sources: ${sourceCount}개</span>
+        <span>${escapeHtml(sourceLabels.length ? sourceLabels.join(' / ') : '반환된 source 라벨 없음')}</span>
+      `;
+    }
   } catch (error) {
-    els.saveMessage.textContent = `AI ?? ?? ?? ??: ${error.message}`;
+    els.saveMessage.textContent = `AI 보조 초안 생성 실패: ${error.message}`;
     els.saveMessage.className = 'save-message error';
+    if (els.aiDraftTrace) {
+      els.aiDraftTrace.className = 'draft-trace error';
+      els.aiDraftTrace.textContent = `AI draft trace 실패: ${error.message}`;
+    }
   } finally {
     els.aiDraftButton.disabled = false;
   }
+}
+
+function copyDraftToFinal() {
+  const draft = els.autoCommentInput.value.trim();
+  const currentFinal = els.finalCommentInput.value.trim();
+
+  if (!draft) {
+    els.saveMessage.textContent = '복사할 초안이 없습니다. 먼저 숫자 기반 초안 또는 AI 보조 초안을 생성하세요.';
+    els.saveMessage.className = 'save-message error';
+    return;
+  }
+
+  if (currentFinal && currentFinal !== draft) {
+    els.saveMessage.textContent = '최종 코멘트가 이미 있습니다. 기존 문안을 덮어쓰지 않도록 직접 확인해 주세요.';
+    els.saveMessage.className = 'save-message error';
+    return;
+  }
+
+  els.finalCommentInput.value = draft;
+  els.saveMessage.textContent = '초안을 최종 코멘트로 복사했습니다. 저장 및 발행 전에 문안을 검토하세요.';
+  els.saveMessage.className = 'save-message ok';
+  els.finalCommentInput.focus();
 }
 
 async function uploadToSupabase() {
@@ -900,7 +1088,11 @@ els.reportSelect.addEventListener('change', () => {
 });
 els.draftButton.addEventListener('click', generateDraft);
 els.aiDraftButton?.addEventListener('click', generateAiDraft);
+els.copyDraftButton?.addEventListener('click', copyDraftToFinal);
 els.reloadResearchButton?.addEventListener('click', () => loadResearch());
+els.addResearchButton?.addEventListener('click', addResearchItem);
+els.saveResearchButton?.addEventListener('click', saveResearch);
+els.sourceRows?.addEventListener('click', handleSourceAction);
 els.uploadButton.addEventListener('click', uploadToSupabase);
 els.runValidationButton.addEventListener('click', runValidation);
 els.reloadJobsButton.addEventListener('click', loadJobRuns);

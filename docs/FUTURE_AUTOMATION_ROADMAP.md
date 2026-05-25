@@ -1,6 +1,6 @@
 # Future Automation Roadmap
 
-Last updated: 2026-05-23
+Last updated: 2026-05-24
 
 ## Positioning
 
@@ -25,9 +25,10 @@ The current visual review gate does not require all advanced automation to be co
 - `src/daily_report/ai/rule_based_provider.mjs` preserves the current grounded fallback behavior while provider-backed LLMs are evaluated.
 - `/api/ai/provider` exposes provider state for smoke checks and future Admin diagnostics.
 - `/api/research/{date}` and `src/daily_report/research/research_items.mjs` define the normalized research-item path before crawlers are added.
+- `POST`/`PUT /api/research/{date}` saves local research items in `data/research/research_YYYY-MM-DD.json` without mutating Supabase report data.
 - `/api/comments/{date}/ai-draft` provides the non-mutating assisted-draft path that future provider-backed LLMs will replace.
-- Admin comment review now has a source review panel and separate number-based vs AI-assisted draft actions.
-- V2 sends `research_items: []` now, so crawlers can later populate the same field.
+- Admin comment review now has a source review panel, manual source add/save, include/exclude/delete controls, and separate number-based vs AI-assisted draft actions.
+- V2 reads `/api/research/{date}` and sends currently included `research_items` into `/api/ask`.
 - The AI context contract includes `sources`, `confidence`, `safety`, `automation_state`, and mode fields.
 - Supabase publication supports `dry_run: true`.
 - `scripts\Verify-Pipeline.ps1` verifies provider status, research context, the AI endpoint, comment draft generation, publish guards, and dry-run readiness.
@@ -37,8 +38,8 @@ The current visual review gate does not require all advanced automation to be co
 
 1. Stabilize manual Admin publish workflow and final V2 design.
 2. Add provider adapter behind `/api/ask` while preserving the current rule-based fallback.
-3. Store research items with source type, URL/channel, timestamp, text, relevance, and report date.
-4. Surface research items in Admin comment review before using them for AI draft generation.
+3. Promote local research-item storage to Supabase using `db/research_items.sql` when crawler data needs shared persistence.
+4. Add crawler/manual-ingestion jobs that write source type, URL/channel, timestamp, text, relevance, and report date.
 5. Add AI-assisted final comment draft mode with source citations.
 6. Add RAG over historical comments and report observations.
 7. Add auto-publish candidate mode that only creates a dry-run payload.
@@ -56,5 +57,5 @@ The current visual review gate does not require all advanced automation to be co
 
 - Add a provider-backed implementation behind `src/daily_report/ai/llm_provider.mjs`.
 - Add crawler jobs that write normalized JSON or Supabase rows using `src/daily_report/research/`.
-- Apply and use `db/research_items.sql` when persistent source review is ready.
-- Add Admin include/exclude controls and source-to-draft citation controls.
+- Apply and use `db/research_items.sql` when source review needs shared persistence beyond local JSON.
+- Add source-to-draft citation controls and provider-backed source trace display.

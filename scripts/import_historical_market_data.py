@@ -35,6 +35,21 @@ METRICS = [
     MetricDef("kr_gov_30y", "국고채 30년", "domestic_rates", "국내금리", "G", "%", "rate_bp"),
     MetricDef("kr_corp_aa0_3y", "회사채 AA0 3년", "credit", "국내금리", "X", "%", "rate_bp"),
     MetricDef("credit_spread_aa0_2y", "회사채 AA0 2년 스프레드", "credit", "크레딧SP", "D", "bp", "spread_bp", 100.0),
+    MetricDef("fut_kospi200_inst", "KOSPI200 선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "B", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kospi200_foreign", "KOSPI200 선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "C", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kospi200_individual", "KOSPI200 선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "D", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr3y_inst", "3년 국채선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "E", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr3y_foreign", "3년 국채선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "F", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr3y_individual", "3년 국채선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "G", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr10y_inst", "10년 국채선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "H", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr10y_foreign", "10년 국채선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "I", "억원", "flow_abs", 0.00000001),
+    MetricDef("fut_kr10y_individual", "10년 국채선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "J", "억원", "flow_abs", 0.00000001),
+    MetricDef("stock_kospi_inst", "KOSPI 기관 순매수", "investor_flows", "주식투자자별순매수금액", "B", "억원", "flow_abs", 0.01),
+    MetricDef("stock_kospi_foreign", "KOSPI 외국인 순매수", "investor_flows", "주식투자자별순매수금액", "C", "억원", "flow_abs", 0.01),
+    MetricDef("stock_kospi_individual", "KOSPI 개인 순매수", "investor_flows", "주식투자자별순매수금액", "D", "억원", "flow_abs", 0.01),
+    MetricDef("stock_kosdaq_inst", "KOSDAQ 기관 순매수", "investor_flows", "주식투자자별순매수금액", "E", "억원", "flow_abs", 0.01),
+    MetricDef("stock_kosdaq_foreign", "KOSDAQ 외국인 순매수", "investor_flows", "주식투자자별순매수금액", "F", "억원", "flow_abs", 0.01),
+    MetricDef("stock_kosdaq_individual", "KOSDAQ 개인 순매수", "investor_flows", "주식투자자별순매수금액", "G", "억원", "flow_abs", 0.01),
     MetricDef("us_treasury_2y", "미국채 2년", "global_rates", "해외금리", "B", "%", "rate_bp"),
     MetricDef("us_treasury_10y", "미국채 10년", "global_rates", "해외금리", "C", "%", "rate_bp"),
     MetricDef("us_treasury_30y", "미국채 30년", "global_rates", "해외금리", "D", "%", "rate_bp"),
@@ -73,6 +88,7 @@ CATEGORY_LABELS = {
     "crypto": "암호화폐",
     "commodities": "상품",
     "credit": "크레딧",
+    "investor_flows": "투자자 동향",
 }
 
 
@@ -254,6 +270,8 @@ def convert_change(current: float, base: float | None, metric: MetricDef) -> flo
         return None
     if metric.change_mode in {"rate_bp", "spread_bp"}:
         return round(((current / metric.value_multiplier) - (base / metric.value_multiplier)) * 100, 2)
+    if metric.change_mode == "flow_abs":
+        return round(current - base, 2)
     return round(((current - base) / base) * 100, 2)
 
 
@@ -293,7 +311,7 @@ def build_report(rows_by_sheet: dict[str, dict[str, dict[str, Any]]], report_dat
         ytd_row = comparable(rows, metric.key, report_date, "ytd")
         previous = previous_row[metric.key]["value"] * metric.value_multiplier if previous_row else None
         ytd = ytd_row[metric.key]["value"] * metric.value_multiplier if ytd_row else None
-        change_unit = "bp" if metric.change_mode in {"rate_bp", "spread_bp"} else "%"
+        change_unit = metric.unit if metric.change_mode == "flow_abs" else "bp" if metric.change_mode in {"rate_bp", "spread_bp"} else "%"
         observations.append(
             {
                 "observed_date": report_date,

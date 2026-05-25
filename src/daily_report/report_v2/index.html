@@ -12,84 +12,68 @@
 <body>
   <div class="dashboard-shell">
     <aside class="side-nav" aria-label="리포트 메뉴">
-      <a class="brand side-brand" href="/report-v2">
-        <span class="brand-mark" aria-hidden="true">MD</span>
-        <span class="brand-text">Market Daily</span>
+      <a class="brand side-brand" href="/report-v2" aria-label="카카오뱅크 Market Daily">
+        <img class="brand-logo brand-logo-full" src="/report-v2/kakaobank-signature.svg" alt="카카오뱅크" />
+        <img class="brand-logo brand-logo-mark" src="/report-v2/kakaobank-symbol.svg" alt="" aria-hidden="true" />
       </a>
 
       <nav class="side-menu" aria-label="주요 메뉴">
-        <a class="side-menu-item active" href="/report-v2">
+        <button class="side-menu-item side-menu-button active" type="button" data-view-target="overview">
           <span class="side-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 13h5V4H4v9Zm0 7h5v-5H4v5Zm7 0h9v-9h-9v9Zm0-16v5h9V4h-9Z"/></svg>
           </span>
           <span>Overview</span>
-        </a>
-        <a class="side-menu-item" href="#reportBody">
+        </button>
+        <button class="side-menu-item side-menu-button" type="button" data-view-target="trend">
           <span class="side-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 5h14v2H5V5Zm0 6h14v2H5v-2Zm0 6h14v2H5v-2Z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M4 19h16v2H4v-2Zm1-3 4-5 4 3 5-8 2 1.2-6.4 10.2-4.2-3.2L6.6 18 5 16Z"/></svg>
           </span>
-          <span>Indicators</span>
-        </a>
-        <a class="side-menu-item" href="/report" target="_blank" rel="noreferrer">
+          <span>Trend</span>
+        </button>
+        <button class="side-menu-item side-menu-button" id="chatToggleNav" type="button">
           <span class="side-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Zm2 2v12h10V6H7Zm2 2h6v2H9V8Zm0 4h6v2H9v-2Z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M20 15.5c0 1.1-.6 2.1-1.5 2.6L12 21l-6.5-2.9A3 3 0 0 1 4 15.5v-8A3.5 3.5 0 0 1 7.5 4h9A3.5 3.5 0 0 1 20 7.5v8ZM8 11a1.2 1.2 0 1 0 0-2.4A1.2 1.2 0 0 0 8 11Zm4 0a1.2 1.2 0 1 0 0-2.4A1.2 1.2 0 0 0 12 11Zm4 0a1.2 1.2 0 1 0 0-2.4A1.2 1.2 0 0 0 16 11Z"/></svg>
           </span>
-          <span>Classic</span>
-        </a>
-        <a class="side-menu-item" href="/admin" target="_blank" rel="noreferrer">
-          <span class="side-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 9.7 8 10 4.6-.3 8-5 8-10V6l-8-4Zm0 2.2L18 7v5c0 3.8-2.4 7.3-6 8-3.6-.7-6-4.2-6-8V7l6-2.8Z"/></svg>
-          </span>
-          <span>Admin</span>
-        </a>
+          <span>AI</span>
+        </button>
       </nav>
-
-      <div class="side-note">
-        <span class="side-note-icon" aria-hidden="true">$</span>
-        <p>Daily market signals for treasury decisions.</p>
-      </div>
     </aside>
 
     <div class="dashboard-main">
       <nav class="topnav" id="topnav">
         <div class="topnav-inner">
           <div class="topnav-dates" id="datePicker" aria-label="날짜 선택"></div>
-          <div class="topnav-right">
-            <a class="btn-ghost topnav-admin" href="/admin" target="_blank" rel="noreferrer">관리자</a>
-            <button class="btn-primary topnav-chat" id="chatToggleNav" type="button">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10c0 .74-.4 1.41-1 1.73L8 14l-5-2.27A2 2 0 0 1 2 10V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6z"/><circle cx="6" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1" fill="currentColor" stroke="none"/></svg>
-              AI 분석
-            </button>
-          </div>
         </div>
       </nav>
 
-      <header class="hero-band" id="hero">
-        <div class="hero-inner">
-          <div class="hero-copy">
-            <div class="hero-meta">
-              <span class="hero-date" id="heroDate">로딩 중...</span>
-              <span class="hero-sep">·</span>
-              <span class="hero-author" id="heroAuthor">자금운용본부</span>
+      <section class="view-panel active" id="overviewView" data-view="overview">
+        <header class="hero-band" id="hero">
+          <div class="hero-inner">
+            <div class="hero-copy">
+              <div class="hero-meta">
+                <span class="hero-date" id="heroDate">로딩 중...</span>
+                <span class="hero-sep">·</span>
+                <span class="hero-author" id="heroAuthor">자금운용본부</span>
+              </div>
+              <h1 class="hero-title">Market Daily</h1>
+              <p class="hero-comment" id="heroComment"></p>
             </div>
-            <h1 class="hero-title">Daily Market Report</h1>
-            <p class="hero-subtitle">금리, 주식, 환율, 원자재 흐름과 검증 상태를 한 화면에서 확인합니다.</p>
-            <p class="hero-comment" id="heroComment"></p>
           </div>
-          <div class="hero-tickers" id="heroTickers"></div>
-        </div>
-      </header>
+        </header>
 
-      <section class="ops-strip" id="opsStrip" aria-label="운영 상태"></section>
-      <section class="brief-board" id="briefBoard" aria-label="데일리 브리프"></section>
+        <section class="brief-board" id="briefBoard" aria-label="데일리 브리프"></section>
+        <section class="market-charts" id="marketCharts" aria-label="시장 추이"></section>
 
-      <main class="report-body" id="reportBody">
-        <div class="report-loading" id="reportLoading">
-          <div class="loading-spinner"></div>
-          <p>리포트를 불러오는 중...</p>
-        </div>
-        <div class="report-grid" id="reportGrid" hidden></div>
-      </main>
+        <main class="report-body" id="reportBody">
+          <div class="report-loading" id="reportLoading">
+            <div class="loading-spinner"></div>
+            <p>리포트를 불러오는 중...</p>
+          </div>
+          <div class="report-grid" id="reportGrid" hidden></div>
+        </main>
+      </section>
+
+      <section class="view-panel trend-workspace" id="trendView" data-view="trend" hidden aria-label="상세 트렌드"></section>
     </div>
   </div>
 

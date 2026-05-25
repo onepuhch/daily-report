@@ -1,6 +1,41 @@
 # Daily Report Operator Guide
 
+## 2026-05-24 Admin Research Source Update
+
+Admin의 코멘트 탭에서 AI 초안에 넣을 근거를 직접 관리할 수 있습니다.
+
+1. `http://127.0.0.1:4173/admin`을 엽니다.
+2. 리포트 날짜를 선택하고 `코멘트 검토` 탭으로 이동합니다.
+3. `리서치 근거` 영역에서 제목, 유형, 중요도, 내용, URL을 입력합니다.
+4. `근거 추가`를 누른 뒤 필요한 항목만 `포함` 상태로 둡니다. 불필요한 항목은 `제외` 또는 `삭제`합니다.
+5. `근거 저장`을 누르면 `data\research\research_YYYY-MM-DD.json`에 저장됩니다.
+6. `AI 보조 초안`은 현재 포함된 근거만 사용하며, 저장/발행은 별도 버튼을 눌러야 합니다.
+7. 초안 생성 후 `AI draft trace`에서 provider, 반영된 근거 수, 반환된 source 라벨을 확인합니다.
+8. fallback AI 초안은 `금리/크레딧`, `주식`, `환율/원자재`, `변동폭 점검` 섹션으로 나뉩니다. 이 구조가 보이지 않으면 최신 서버 코드가 실행 중인지 확인합니다.
+9. 초안을 그대로 최종 코멘트 검토 대상으로 옮길 때는 `초안을 최종 코멘트로 복사`를 누릅니다. 최종 코멘트가 이미 작성되어 있으면 자동으로 덮어쓰지 않습니다.
+
+이 기능은 Supabase 리포트 데이터를 수정하지 않습니다. 실제 발행 상태 변경은 기존 코멘트 저장/발행 흐름과 `dry_run` 가드를 계속 따릅니다.
+
+## 2026-05-24 Public V2 AI Evidence Check
+
+`http://127.0.0.1:4173/report-v2`의 상단 운영 카드에서 `AI 근거`를 확인합니다.
+
+- `대기`로 보이면 해당 날짜에 저장되어 포함된 리서치 근거가 없는 상태입니다.
+- `N개`로 보이면 Admin에서 `포함` 상태로 저장한 근거가 V2 AI 분석에도 연결된 상태입니다.
+- V2의 AI 분석 채팅은 현재 날짜의 포함된 근거만 사용합니다.
+- 모바일에서는 상단 날짜 목록이 좌우 스크롤되며, 현재 선택 날짜가 자동으로 보이는 위치로 이동합니다.
+
 이 문서는 개발자가 아닌 운영자가 DAILY REPORT 자동화를 실행하거나 문제를 확인할 때 쓰는 최소 절차입니다.
+
+## 최종 리뷰 직전 점검
+
+화면 최종 확인을 요청하기 전에는 아래 명령을 실행합니다.
+
+```text
+scripts\final-readiness.cmd
+```
+
+이 명령은 현재 `4173` 서버, 비파괴 pipeline smoke, V2 데스크톱/모바일 캡처, Admin 코멘트 workflow 캡처를 한 번에 확인합니다. 통과 후에도 실제 발행은 Admin의 저장/발행 버튼에서만 일어납니다.
 
 ## 기본 경로
 
@@ -57,8 +92,8 @@ http://127.0.0.1:4173/report
 
 The Admin comment tab now has two draft paths:
 
-- `?? ?? ??`: deterministic fallback based on report observations.
-- `AI ?? ??`: calls `/api/comments/{date}/ai-draft` through the provider boundary and includes current research context. It does not save or publish anything by itself.
+- `숫자 기반 초안`: deterministic fallback based on report observations.
+- `AI 보조 초안`: calls `/api/comments/{date}/ai-draft` through the provider boundary and includes current research context. It does not save or publish anything by itself.
 
 Research sources appear in the Admin source review panel. Until crawlers are connected, this panel may show zero collected sources and the operator memo remains the manual source input.
 

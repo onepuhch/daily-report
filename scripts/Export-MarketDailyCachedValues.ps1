@@ -256,6 +256,22 @@ function Get-MetricDefinitions {
         @{ Key="kr_corp_aa0_3y"; Name="회사채 AA0 3년"; Category="credit"; Sheet="국내금리"; Column="X"; Unit="%"; ChangeMode="rate_bp" },
         @{ Key="credit_spread_aa0_2y"; Name="회사채 AA0 2년 스프레드"; Category="credit"; Sheet="크레딧SP"; Column="D"; Unit="bp"; ChangeMode="spread_bp"; ValueMultiplier=100 },
 
+        @{ Key="fut_kospi200_inst"; Name="KOSPI200 선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="B"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kospi200_foreign"; Name="KOSPI200 선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="C"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kospi200_individual"; Name="KOSPI200 선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="D"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr3y_inst"; Name="3년 국채선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="E"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr3y_foreign"; Name="3년 국채선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="F"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr3y_individual"; Name="3년 국채선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="G"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr10y_inst"; Name="10년 국채선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="H"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr10y_foreign"; Name="10년 국채선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="I"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="fut_kr10y_individual"; Name="10년 국채선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="J"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
+        @{ Key="stock_kospi_inst"; Name="KOSPI 기관 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="B"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+        @{ Key="stock_kospi_foreign"; Name="KOSPI 외국인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="C"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+        @{ Key="stock_kospi_individual"; Name="KOSPI 개인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="D"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+        @{ Key="stock_kosdaq_inst"; Name="KOSDAQ 기관 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="E"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+        @{ Key="stock_kosdaq_foreign"; Name="KOSDAQ 외국인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="F"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+        @{ Key="stock_kosdaq_individual"; Name="KOSDAQ 개인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="G"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
+
         @{ Key="us_treasury_2y"; Name="미국채 2년"; Category="global_rates"; Sheet="해외금리"; Column="B"; Unit="%"; ChangeMode="rate_bp" },
         @{ Key="us_treasury_10y"; Name="미국채 10년"; Category="global_rates"; Sheet="해외금리"; Column="C"; Unit="%"; ChangeMode="rate_bp" },
         @{ Key="us_treasury_30y"; Name="미국채 30년"; Category="global_rates"; Sheet="해외금리"; Column="D"; Unit="%"; ChangeMode="rate_bp" },
@@ -305,6 +321,7 @@ function Get-DisplayCategory {
         crypto               = "암호화폐"
         commodities          = "상품"
         credit               = "크레딧"
+        investor_flows       = "투자자 동향"
     }
 
     return $labels[$Category]
@@ -389,6 +406,10 @@ function Convert-MarketChange {
         return [math]::Round((($Current / $ValueMultiplier) - ($Base / $ValueMultiplier)) * 100, 2)
     }
 
+    if ($ChangeMode -eq "flow_abs") {
+        return [math]::Round(($Current - $Base), 2)
+    }
+
     return [math]::Round((($Current - $Base) / $Base) * 100, 2)
 }
 
@@ -413,7 +434,7 @@ function New-HtmlReport {
         return "<span class='$class'>$prefix$(([double]$value).ToString('#,##0.##', [System.Globalization.CultureInfo]::InvariantCulture))$unit</span>"
     }
 
-    $categoryOrder = @("domestic_rates", "global_rates", "domestic_equities_fx", "global_equities", "fx", "crypto", "commodities", "credit")
+    $categoryOrder = @("domestic_rates", "global_rates", "domestic_equities_fx", "global_equities", "fx", "crypto", "commodities", "credit", "investor_flows")
     $sections = New-Object System.Text.StringBuilder
     foreach ($category in $categoryOrder) {
         $items = @($Report.observations | Where-Object { $_.category -eq $category })

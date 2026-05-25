@@ -27,6 +27,17 @@ function Assert-Condition {
   }
 }
 
+function Assert-ReadableText {
+  param(
+    [string]$Name,
+    [string]$Text
+  )
+
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($Text)) "$Name text is empty."
+  $badPattern = [regex]'[\uFFFD\uF900-\uFAFF]'
+  Assert-Condition (-not $badPattern.IsMatch($Text)) "$Name text contains mojibake-like characters."
+}
+
 function Invoke-JsonCheck {
   param(
     [string]$Name,
@@ -52,6 +63,22 @@ function Invoke-JsonPostCheck {
 
   try {
     $response = Invoke-RestMethod -Method Post -Uri $Url -TimeoutSec 20 -ContentType 'application/json; charset=utf-8' -Body $Body
+    Write-Host "[OK] $Name $Url"
+    return $response
+  } catch {
+    throw "[FAIL] $Name $Url - $($_.Exception.Message)"
+  }
+}
+
+function Invoke-JsonPutCheck {
+  param(
+    [string]$Name,
+    [string]$Url,
+    [string]$Body
+  )
+
+  try {
+    $response = Invoke-RestMethod -Method Put -Uri $Url -TimeoutSec 20 -ContentType 'application/json; charset=utf-8' -Body $Body
     Write-Host "[OK] $Name $Url"
     return $response
   } catch {
@@ -122,6 +149,8 @@ $tmpDir = Join-Path $root "data\tmp-verify"
 New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
 $stdout = Join-Path $tmpDir "server-$Port.out.log"
 $stderr = Join-Path $tmpDir "server-$Port.err.log"
+$researchCheckDate = "2099-01-02"
+$researchCheckPath = Join-Path $root "data\research\research_$researchCheckDate.json"
 
 $oldPort = $env:DAILY_REPORT_ADMIN_PORT
 $server = $null
@@ -194,6 +223,14 @@ try {
   Assert-Condition ($null -ne $research.summary) "research summary is missing."
   Assert-Condition ($research.summary.count -ge 0) "research summary count is invalid."
 
+  $researchSaveBody = '{"items":[{"source_type":"manual_note","title":"verify-pipeline source","text":"non-destructive local research save check","relevance":"high","included":true}]}'
+  $savedResearch = Invoke-JsonPutCheck "research save" "$baseUrl/api/research/$researchCheckDate" $researchSaveBody
+  Assert-Condition ($savedResearch.report_date -eq $researchCheckDate) "saved research date does not match check date."
+  Assert-Condition ($savedResearch.summary.count -eq 1) "saved research summary count is invalid."
+  $reloadedResearch = Invoke-JsonCheck "research reload after save" "$baseUrl/api/research/$researchCheckDate"
+  Assert-Condition ($reloadedResearch.items.Count -eq 1) "saved research item was not reloaded."
+  Assert-Condition ($reloadedResearch.items[0].included -eq $true) "saved research include flag was not preserved."
+
   $draftBody = '{"reference_note":"verify-pipeline non-mutating draft check"}'
   $draft = Invoke-JsonPostCheck "comment draft" "$baseUrl/api/comments/$latestDate/draft" $draftBody
   Assert-Condition (-not [string]::IsNullOrWhiteSpace($draft.auto_comment)) "comment draft is empty."
@@ -201,12 +238,21 @@ try {
   $aiDraftBody = '{"reference_note":"verify-pipeline AI assisted draft check","research_items":[]}'
   $aiDraft = Invoke-JsonPostCheck "AI assisted comment draft" "$baseUrl/api/comments/$latestDate/ai-draft" $aiDraftBody
   Assert-Condition (-not [string]::IsNullOrWhiteSpace($aiDraft.auto_comment)) "AI assisted comment draft is empty."
+  Assert-ReadableText "AI assisted comment draft" $aiDraft.auto_comment
+  $ratesCreditSection = "$([char]0xAE08)$([char]0xB9AC)/$([char]0xD06C)$([char]0xB808)$([char]0xB527)"
+  $moverSection = "$([char]0xBCC0)$([char]0xB3D9)$([char]0xD3ED) $([char]0xC810)$([char]0xAC80)"
+  Assert-Condition ($aiDraft.auto_comment.Contains($ratesCreditSection)) "AI assisted comment draft is missing the rates/credit section."
+  Assert-Condition ($aiDraft.auto_comment.Contains($moverSection)) "AI assisted comment draft is missing the mover review section."
   Assert-Condition ($aiDraft.ai_provider.active_provider -eq "rule_based") "AI assisted draft provider status is missing."
   Assert-Condition ($null -ne $aiDraft.research_summary) "AI assisted draft research summary is missing."
 
-  $askBody = "{`"question`":`"KOSPI 요약`",`"report_date`":`"$latestDate`"}"
+  $askBody = (@{
+    question = "KOSPI"
+    report_date = $latestDate
+  } | ConvertTo-Json -Compress)
   $ask = Invoke-JsonPostCheck "AI market answer" "$baseUrl/api/ask" $askBody
   Assert-Condition (-not [string]::IsNullOrWhiteSpace($ask.answer)) "AI answer is empty."
+  Assert-ReadableText "AI market answer" $ask.answer
   Assert-Condition (@($ask.matches).Count -gt 0) "AI answer did not include matched metrics."
   Assert-Condition ($ask.ai_provider.active_provider -eq "rule_based") "AI answer provider status is missing."
   Assert-Condition ($null -ne $ask.research_summary) "AI answer research summary is missing."
@@ -246,6 +292,8 @@ try {
   if ($succeeded) {
     Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
   }
+
+  Remove-Item -LiteralPath $researchCheckPath -Force -ErrorAction SilentlyContinue
 
   if ($null -eq $oldPort) {
     Remove-Item Env:\DAILY_REPORT_ADMIN_PORT -ErrorAction SilentlyContinue

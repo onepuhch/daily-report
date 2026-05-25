@@ -1,6 +1,6 @@
 # Excel Coverage
 
-Last checked: 2026-05-22
+Last checked: 2026-05-25
 
 ## Scope
 
@@ -26,6 +26,8 @@ Operational source sheets used by the extractor:
 - `해외환율`
 - `암호화폐`
 - `상품`
+- `선물투자자별순매수금액`
+- `주식투자자별순매수금액`
 
 Important implementation note:
 
@@ -55,11 +57,13 @@ Latest automated source coverage check:
 
 Result:
 
-- Expected mapped metrics: 35
-- Local JSON observations: 35
+- Expected mapped metrics: 50
+- Local workbook extraction observations: 50
 - Admin API observations: 35 for Supabase latest `2026-05-21`
-- Missing mapped metrics: 0
-- Python/PowerShell mapping parity: 35 vs 35, mismatch 0
+- Missing mapped metrics from local workbook extraction: 0
+- Python/PowerShell mapping parity: 50 vs 50, mismatch 0
+
+Note: investor-flow metrics are now mapped and extract correctly from the local workbook. The current Supabase latest report still has the older 35-observation payload until that report date is regenerated/re-uploaded.
 
 ## Extracted Metric Inventory
 
@@ -100,6 +104,23 @@ Result:
 | `silver` | 은 | 상품 | `상품` | E | mapped |
 | `sox` | 필라델피아 반도체 | 상품 | `상품` | F | mapped |
 | `copper` | 구리 | 상품 | `상품` | G | mapped |
+| `fut_kospi200_inst` | KOSPI200 선물 기관 순매수 | 투자자 동향 | `선물투자자별순매수금액` | B | mapped |
+| `fut_kospi200_foreign` | KOSPI200 선물 외국인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | C | mapped |
+| `fut_kospi200_individual` | KOSPI200 선물 개인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | D | mapped |
+| `fut_kr3y_inst` | 3년 국채선물 기관 순매수 | 투자자 동향 | `선물투자자별순매수금액` | E | mapped |
+| `fut_kr3y_foreign` | 3년 국채선물 외국인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | F | mapped |
+| `fut_kr3y_individual` | 3년 국채선물 개인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | G | mapped |
+| `fut_kr10y_inst` | 10년 국채선물 기관 순매수 | 투자자 동향 | `선물투자자별순매수금액` | H | mapped |
+| `fut_kr10y_foreign` | 10년 국채선물 외국인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | I | mapped |
+| `fut_kr10y_individual` | 10년 국채선물 개인 순매수 | 투자자 동향 | `선물투자자별순매수금액` | J | mapped |
+| `stock_kospi_inst` | KOSPI 기관 순매수 | 투자자 동향 | `주식투자자별순매수금액` | B | mapped |
+| `stock_kospi_foreign` | KOSPI 외국인 순매수 | 투자자 동향 | `주식투자자별순매수금액` | C | mapped |
+| `stock_kospi_individual` | KOSPI 개인 순매수 | 투자자 동향 | `주식투자자별순매수금액` | D | mapped |
+| `stock_kosdaq_inst` | KOSDAQ 기관 순매수 | 투자자 동향 | `주식투자자별순매수금액` | E | mapped |
+| `stock_kosdaq_foreign` | KOSDAQ 외국인 순매수 | 투자자 동향 | `주식투자자별순매수금액` | F | mapped |
+| `stock_kosdaq_individual` | KOSDAQ 개인 순매수 | 투자자 동향 | `주식투자자별순매수금액` | G | mapped |
+
+35 base metrics + 15 investor-flow metrics = 50 mapped metrics total.
 
 ## Excluded Source Columns
 
@@ -114,12 +135,10 @@ Additional deferred source sheets detected by `scripts\check_excel_coverage.py`:
 
 | Sheet | Excluded columns | Classification | Reason |
 |---|---|---|---|
-| `선물투자자별순매수금액` | B:J | investor_flow_deferred | Investor-flow data exists in the workbook but is not part of the current 35-metric daily report MVP. |
-| `주식투자자별순매수금액` | B:G | investor_flow_deferred | Investor-flow data exists in the workbook but is not part of the current 35-metric daily report MVP. |
-| `국공채형MMF` | B:K | mmf_deferred | MMF data exists in the workbook but is not part of the current 35-metric daily report MVP. |
-| `일반형MMF` | B:G | mmf_deferred | MMF data exists in the workbook but is not part of the current 35-metric daily report MVP. |
+| `국공채형MMF` | B:K | mmf_deferred | MMF data exists in the workbook but is not part of the current daily report metric set. |
+| `일반형MMF` | B:G | mmf_deferred | MMF data exists in the workbook but is not part of the current daily report metric set. |
 
-No mapped metric is currently missing from the latest local JSON or Admin API response.
+No mapped metric is currently missing from the latest local workbook extraction. Supabase needs a refreshed upload before investor-flow rows appear in the latest API response.
 
 ## Risks And Follow-Ups
 
@@ -130,3 +149,5 @@ No mapped metric is currently missing from the latest local JSON or Admin API re
    - The current XML inspection sees only presentation-level cached cells on `MARKET DAILY`.
    - A visual/manual review of the sheet is still useful before declaring final coverage.
 3. Keep this document updated whenever a metric is added, intentionally excluded, renamed, or reclassified.
+4. 은행채 AAA re-introduction (D-023). The 은행채 AAA tenors above are currently `intended_exclusion` but the operator asked to bring them back into the `금리·크레딧` view. To do so: read the exact `국내금리` columns for 은행채 AAA (3개월/1/2/3/5/10년) on the Infomax PC workbook, add the chosen tenors to both `scripts/Export-MarketDailyCachedValues.ps1` and `scripts/import_historical_market_data.py` with `category=credit`, `unit=%`, `ChangeMode=rate_bp` (recommended start: 1년·2년·3년), then re-extract/re-upload. Move the rows out of the exclusion table and into the inventory once added.
+5. Public V2 card grouping is a UI-level choice, independent of these extraction categories. The V2 report groups `crypto` and all `investor_flows` under the `주식·투자자` card (D-022); the extraction-time categories (`crypto`, `investor_flows`) are unchanged.

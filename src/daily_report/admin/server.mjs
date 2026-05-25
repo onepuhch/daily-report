@@ -1430,10 +1430,52 @@ async function readResearchItems(date) {
   }
 }
 
+async function writeResearchItems(date, payload = {}) {
+  if (!isDate(date)) {
+    const error = new Error('Invalid report date');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const items = normalizeResearchItems(payload.items, { report_date: date });
+  await mkdir(researchDir, { recursive: true });
+  const researchPath = path.join(researchDir, `research_${date}.json`);
+  const body = {
+    report_date: date,
+    updated_at: new Date().toISOString(),
+    items,
+  };
+  await writeFile(researchPath, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+  return {
+    ...body,
+    summary: summarizeResearchItems(items),
+  };
+}
+
+function dedupeResearchItems(items) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const item of normalizeResearchItems(items)) {
+    const key = [
+      item.report_date,
+      item.source_type,
+      item.url,
+      item.title,
+      item.text,
+    ].join('|').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
 async function buildResearchContext(date, payload = {}) {
   const storedItems = await readResearchItems(date);
   const requestItems = normalizeResearchItems(payload.research_items, { report_date: date });
-  const items = [...storedItems, ...requestItems].filter((item) => item.included !== false);
+  const items = dedupeResearchItems([...requestItems, ...storedItems]).filter((item) => item.included !== false);
   return {
     items,
     summary: summarizeResearchItems(items),
@@ -2423,6 +2465,12 @@ const server = createServer(async (req, res) => {
         items,
         summary: summarizeResearchItems(items),
       });
+      return;
+    }
+
+    if ((req.method === 'POST' || req.method === 'PUT') && researchMatch) {
+      const body = await readBody(req);
+      sendJson(res, 200, await writeResearchItems(researchMatch[1], body));
       return;
     }
 

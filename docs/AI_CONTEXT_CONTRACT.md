@@ -1,6 +1,6 @@
 # AI Context Contract
 
-Last updated: 2026-05-23
+Last updated: 2026-05-24
 
 ## Purpose
 
@@ -73,7 +73,8 @@ Every AI surface should use this payload shape as the stable contract:
       "published_at": "2026-05-21T07:30:00+09:00",
       "author": "optional source or channel",
       "text": "요약 또는 원문 일부",
-      "relevance": "low|medium|high"
+      "relevance": "low|medium|high",
+      "included": true
     }
   ],
   "automation_state": {
@@ -85,7 +86,7 @@ Every AI surface should use this payload shape as the stable contract:
 }
 ```
 
-Current `/report-v2` already sends the selected report date, `surface: public_report_v2`, report comment, validation context, and empty `research_items`. That is intentional future wiring: crawlers can later populate the same field without changing the UI contract.
+Current `/report-v2` sends the selected report date, `surface: public_report_v2`, report comment, validation context, and currently included local research items. Crawlers can later populate the same `research_items` field without changing the UI contract.
 
 ## Answer Shape
 
@@ -130,10 +131,16 @@ AI providers should return:
 - `/api/ask` now calls the provider adapter boundary and currently resolves to the rule-based fallback.
 - `/api/ai/provider` exposes the active/requested provider state for smoke tests and Admin diagnostics.
 - `/api/research/{date}` reads normalized local research items from `data/research/research_{date}.json` when present.
+- `POST`/`PUT /api/research/{date}` saves normalized local research items without mutating Supabase report data.
 - `/api/comments/{date}/ai-draft` creates a non-mutating AI-assisted draft through the same provider boundary.
+- Rule-based `assisted_draft` output is intentionally sectioned for operator review: rates/credit, equities, FX/commodities, top movers, saved-comment context, and included research notes.
 - `src/daily_report/research/research_items.mjs` normalizes future Google/news/Telegram/manual-note items into the shared AI context shape.
 - `db/research_items.sql` defines the future Supabase storage table but has not been applied automatically.
-- Admin comment workflow now shows source review state, provider status, and separate number-based vs AI-assisted draft buttons.
+- Admin comment workflow now shows source review state, provider status, manual research add/save controls, include/exclude/delete controls, and separate number-based vs AI-assisted draft buttons.
+- Admin AI-assisted draft generation now exposes a UI trace with provider, included research count, returned source count, and source labels.
+- Public report V2 loads `/api/research/{date}`, shows included research evidence readiness in the operations/process area, and passes currently included items into `/api/ask`.
+- AI-assisted draft requests pass only currently included research items.
+- The rule-based fallback provider now returns readable Korean answer/follow-up templates, sectioned assisted drafts, and a research summary for local/manual evidence.
 - `/api/comments/{date}/draft` can create a non-empty draft without mutating publication state.
 - `/api/supabase/reports/{date}` supports `dry_run: true`, which is the safety hook future autonomous flows must use before any real write.
 - Provider-backed LLM/RAG/news/Telegram crawling are not removed from scope. They are not blockers for the current visual review gate, but they remain part of the final product direction.

@@ -1,5 +1,246 @@
 # Daily Report Handoff
 
+## 2026-05-25 V2 UI refinement (branding/cards/trend/calendar)
+
+사용자 2차 공개 V2 리뷰 11개 피드백을 반영했다. 의사결정은 D-021~D-023, 상세 플랜은 plan 파일(`ethereal-orbiting-simon.md`) 참고.
+
+- 브랜딩: 좌측 사이드 브랜드(노란 박스 + "Market Daily")를 카카오뱅크 로고로 교체. 가로형 시그니처(`kakaobank-signature.svg`)를 기본, 축소 사이드바(≤1180px)에서는 심볼(`kakaobank-symbol.svg`)로 스왑. 두 SVG는 `src/daily_report/report_v2/`에 배치(서버가 `/report-v2/*`로 서비스). 테마 색은 중립 유지(노란색 미사용). 좌하단 `KB / Treasury market brief.` 노트 제거.
+- Daily Brief: 우측 Market Watch 카드(및 "4" 배지) 제거, Daily Brief 전체 폭. `getTopMovers` dead code 제거.
+- 오버뷰 트렌드: 헤더를 `Trends / 주요 시장 추이` → `1M Trends / 월간 추이`로 변경. 미니 차트는 최근 ~22거래일(1개월)로 슬라이스(`TREND_WINDOW`). 슬롯 제목을 고정값 대신 선택 지표의 카테고리 라벨로 동적화. 하단 "N개 관측치"를 날짜 범위(가로축)로 교체하고 세로축에 최소/최대값 추가. Trend Lab 상세 카드에도 세로축 적용.
+- 드롭다운/날짜: 긴 `<select>` 2곳을 바닐라 커스텀 UI로 교체. 트렌드 지표는 카테고리 그룹 + 검색 + 스크롤 팝오버(`openMetricPicker`/`openPopover`), 리포트 날짜는 이전/다음 화살표 + 월 달력 팝오버(`openCalendarPopover`, 리포트 있는 날짜만 활성).
+- 2x2 카드 재구성(D-022): `금리·크레딧` / `주식·투자자`(+암호화폐, +투자자 순매수) / `환율` / `원자재`. `CATEGORY_META`/`CATEGORY_ORDER`/`metricTone` 갱신(crypto→green). 투자자 동향은 15행 표 대신 기관/외국인/개인 컴팩트 블록(`renderFlowsBlock`)으로, 데이터 있을 때만 표시.
+- 은행채(D-023): 현재 intended_exclusion. UI는 `credit` 카테고리로 자동 표시되므로 코드 변경 불필요. 매핑 추가 + 재업로드는 인포맥스 PC 작업으로 `지금 바로 할 일`에 추가(투자자 동향 재업로드와 함께).
+
+데이터 주의: 이 로컬/fallback 환경의 `/api/history`는 일부 지표가 2026-04-08까지만 있어 1M 차트가 리포트 날짜(2026-05-21)까지 닿지 않는다. 코드 문제 아님 — Supabase history freshness 이슈로 투자자 동향 재업로드와 같은 성격.
+
+검증:
+
+- `node --check src\daily_report\report_v2\app.js`, `node --check src\daily_report\admin\server.mjs` 통과.
+- 임시 포트 서버로 정적 자산 200 확인: `/report-v2`, `app.js`, `styles.css`, `kakaobank-signature.svg`, `kakaobank-symbol.svg`(image/svg+xml), `/api/reports`.
+- Edge headless 데스크탑/모바일 스크린샷 재캡처: `design ref/figma-financial-dashboard/report-v2-{desktop,mobile}-check.png`. 로고/1M 헤더/Market Watch 제거/2x2(주식·투자자에 암호화폐 포함)/달력 버튼/모바일 오버플로 없음 확인.
+- `scripts\Verify-Pipeline.ps1` 전 항목 통과(latest 2026-05-21, observations 35, KOSPI 289포인트).
+
+## 2026-05-25 V2 trend/investor-flow follow-up
+
+Followed up on the interrupted public V2 review prompt.
+
+- Investor-flow data investigation:
+  - Current live latest API response for `2026-05-21` still has the older 35-observation payload and no `investor_flows` rows.
+  - Local workbook extraction now maps and extracts 50 observations from `MARKET DAILY.xlsm`, including 15 investor-flow metrics from `선물투자자별순매수금액` and `주식투자자별순매수금액`.
+  - `scripts\check_excel_coverage.py --workbook "MARKET DAILY.xlsm"` confirms 50 mapped metrics, 50 extracted observations, 0 missing metrics, and Python/PowerShell mapping parity 50 vs 50.
+  - Conclusion: the Excel data exists and the mapping is now restored locally; Supabase latest needs a refreshed upload/regeneration before investor-flow rows appear in Admin/API/public V2 for `2026-05-21`.
+- Overview trend cards:
+  - Kept three compact trend slots with dropdown selection.
+  - Initial selections are `kr_gov_3y`, `kospi`, and `usdkrw`.
+- Trend tab:
+  - Added/kept a dedicated Trend Lab view with grouped metric checkboxes and multi-card chart detail grid.
+  - Default detailed selections include `kr_gov_3y`, `kospi`, `usdkrw`, and `credit_spread_aa0_2y`.
+  - Fixed a refresh bug so the detailed Trend Lab charts re-render after history data loads instead of staying as one-point charts.
+- 2x2 market data cards:
+  - Preserved four public cards: `금리·크레딧`, `주식·투자자`, `환율·암호화폐`, `원자재`.
+  - Investor-flow rows now belong inside the `주식·투자자` card, grouped after domestic/global equities when DB data is available, so restoring investor flows will not create a fifth card.
+  - Domestic/overseas distinction is visible through grouped rows such as `국내금리`, `해외금리`, `국내주식`, `해외주식`.
+- Credit spread:
+  - `credit_spread_aa0_2y` is present in the live API and appears in the `금리·크레딧` table under `크레딧`.
+  - It is also selected by default in the detailed Trend Lab, which is the better place for the credit-spread chart than the compact Overview slots.
+- Mobile polish:
+  - Fixed mobile clipping in Daily Brief and Market Watch.
+  - Refreshed `report-v2-desktop-check.png` and `report-v2-mobile-check.png`.
+- Docs updated:
+  - `docs\EXCEL_COVERAGE.md`
+  - `docs\ADMIN_MVP_CHECKLIST.md`
+  - `docs\FINAL_READINESS_CHECKLIST.md`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `python scripts\check_excel_coverage.py --project-root . --workbook "MARKET DAILY.xlsm" --format json`
+- Edge headless DOM/screenshot checks for `/report-v2`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+- `scripts\final-readiness.cmd` passed.
+
+## 2026-05-25 V2 public-report information architecture pass
+
+Applied user design feedback from the first public V2 review.
+
+- Moved the public report away from operator/admin status exposure.
+  - Removed the visible operations strip from `/report-v2`.
+  - Removed the public process/validation card from the daily brief area.
+  - Removed top-right Admin and duplicated AI controls from the public top bar.
+- Reworked public navigation from `Overview / Indicators / Classic / Admin` to `Brief / Markets / Trends / AI`.
+- Changed the top date list to a compact date dropdown so the header line can stay clean.
+- Standardized the public title to `Market Daily` and removed the explanatory hero subtitle.
+- Replaced the redundant top ticker row with a compact `Market Pulse` card.
+- Changed `Daily Treasury Brief` copy to `Daily Brief` with the section title `전일 국내외 채권시장 영향 요약`.
+- Kept `Market Watch` because market dashboard/report references commonly use watchlist/top-mover patterns, but made it purely market-facing rather than process-facing.
+- Added a `Trends` section with clearly labeled 7-day charts for domestic rates, KOSPI, and USD/KRW.
+- Removed category-level direction tags such as `혼조`, `중립`, and `하락 우위`; they were too vague without written analyst context.
+- Labeled every small category sparkline as `7일 추이: {대표 지표}` so the mini charts are interpretable.
+- Fixed V2 category mapping:
+  - `국내 금리·크레딧` now includes `domestic_rates` and `credit`.
+  - `국내 주식·환율` now includes domestic equity metrics plus `usdkrw`.
+  - `해외 주식·환율·암호화폐` now combines `global_equities`, non-USD/KRW `fx`, and `crypto`.
+  - `투자자 동향` is hidden when no `investor_flows` observations exist.
+- Data gap noted: the current latest report API for `2026-05-21` returns 35 observations but no `investor_flows` rows. The UI no longer shows an empty investor-flow card, but the ingestion path still needs investor-flow data restored if that section is required in production.
+- Refreshed screenshots:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- Edge headless DevTools capture confirmed:
+  - title `Market Daily`
+  - date dropdown present
+  - `ops-card` count 0
+  - 3 trend cards
+  - 5 populated market category cards
+  - no desktop or mobile horizontal overflow
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` passed.
+- `scripts\final-readiness.cmd` passed after the refreshed screenshots.
+
+### Follow-up simplification from user review
+
+- Removed the `Market Pulse` hero card. The first screen now keeps `Market Daily` and the daily brief closer together with less unused whitespace.
+- Reduced the public left navigation to `Overview / Trend / AI`.
+- Re-grouped market data cards into reader-facing sections instead of source-category sections:
+  - `금리·크레딧`: domestic rates, global rates, and credit.
+  - `주식`: domestic and global equity indices.
+  - `환율·암호화폐`: FX and crypto.
+  - `원자재`: commodities.
+- Removed the small chart from each market data card header. Charting now lives only in the dedicated `Trend` section.
+- Removed the duplicated bottom-right AI button on desktop because the left nav already has AI. The floating AI button remains on mobile where the side nav is hidden.
+- Refreshed screenshots again:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+- Edge headless DevTools capture confirmed:
+  - side nav items: `Overview`, `Trend`, `AI`
+  - no `Market Pulse`
+  - no visible ops cards
+  - 3 trend cards
+  - 4 market data cards
+  - no card header sparkline boxes
+  - no desktop/mobile horizontal overflow
+
+## 2026-05-25 V2 pre-review visual polish
+
+Polished the V2 public report after reviewing fresh desktop/mobile captures.
+
+- Changed the V2 process card from raw English validation warnings to compact Korean operator-facing summaries.
+- Changed the process side-card label from `Process` to `검증 프로세스`.
+- Changed the generated-at ops card to compact `MM.DD HH:mm` formatting and normalized `supabase` to `Supabase`.
+- Tightened the brief-card text width so the decorative donut no longer crowds the summary copy.
+- Adjusted mobile metric tables so all four columns fit inside the viewport instead of clipping the annual-change column.
+- Scoped the mobile compact badge rule to metric tables only, so Watchpoints labels remain readable.
+- Refreshed V2 screenshots:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+- Edge headless DevTools capture confirmed desktop/mobile render completion, no mobile body overflow, and readable Watchpoints.
+- `scripts\final-readiness.cmd` passed against current `http://127.0.0.1:4173` and refreshed screenshots.
+
+## 2026-05-25 Final readiness command
+
+Added a non-destructive final readiness command for the pre-visual-review gate.
+
+- Added `scripts\Final-Readiness.ps1`.
+- Added `scripts\final-readiness.cmd`.
+- The command checks the currently running `http://127.0.0.1:4173` server, runs `Verify-Pipeline.ps1` on a temporary port, and verifies the V2 desktop, V2 mobile, and Admin comment workflow screenshots exist and are recent.
+- Updated `docs\FINAL_READINESS_CHECKLIST.md` so final user visual review is gated on `scripts\final-readiness.cmd`, not only the lower-level smoke test.
+- Updated `docs\OPERATOR_GUIDE.md` with the final review precheck command.
+
+Verification:
+
+- Current `4173` health/admin/report-v2 checks passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Final-Readiness.ps1` passed.
+- Temporary research verification file cleanup still leaves `data\research\research_2099-01-02.json` absent.
+
+## 2026-05-24 Assisted draft quality gate
+
+Tightened the fallback AI comment draft so Admin can review a more report-like draft before a paid/provider-backed LLM is connected.
+
+- `src/daily_report/ai/rule_based_provider.mjs` now gives `assisted_draft` mode a sectioned Korean draft instead of a raw metric list.
+- The sectioned draft covers `금리/크레딧`, `주식`, `환율/원자재`, and `변동폭 점검`, then appends saved-comment and research-evidence notes.
+- The provider still uses only current report observations plus included research items; it does not invent external news or mutate Supabase.
+- `/api/ask` keeps the existing metric-search answer shape.
+- `scripts\Verify-Pipeline.ps1` now checks that AI-assisted draft output is readable and contains the expected section shape. The section assertions avoid raw Korean literals in the PowerShell source so Windows PowerShell encoding does not break parsing.
+- Admin now has a `초안을 최종 코멘트로 복사` button. It copies the generated draft into the final-comment field only when the final field is empty or already identical, so existing final wording is not overwritten.
+- Added Edge headless Admin workflow capture: `design ref\figma-financial-dashboard\admin-comment-workflow-check.png`.
+- Restarted the local `4173` review server after the provider update.
+
+Verification:
+
+- `node --check src\daily_report\ai\rule_based_provider.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- Manual HTTP `/api/comments/2026-05-21/ai-draft` check returned a sectioned Korean draft with `provider=rule_based`.
+- Edge headless DevTools check confirmed the Admin copy button copied the generated draft to the final-comment field without saving or publishing.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server is reachable on `http://127.0.0.1:4173`.
+
+## 2026-05-24 V2 research visibility polish
+
+Continued the V2 readiness pass after Admin research persistence.
+
+- Public report V2 now loads `/api/research/{date}` together with validation during report load.
+- Added an `AI 근거` operations card so the public V2 screen exposes how many included research items are available to the AI layer.
+- The V2 process card now also states whether included research evidence is connected.
+- V2 chat reuses the already loaded included research items and only refetches research context if the report did not load it yet.
+- Mobile date navigation now keeps pills as fixed-size scroll items and automatically scrolls the active date into view.
+- Refreshed Edge headless screenshots for desktop and mobile after the UI change.
+- Rebuilt `src/daily_report/ai/rule_based_provider.mjs` Korean response templates; the fallback AI answer no longer emits mojibake.
+- `assisted_draft` mode now uses a Korean operator-review draft header instead of echoing the raw instruction prompt.
+- Added an Admin `AI draft trace` box that shows provider, included research count, returned source count, and source labels after AI-assisted draft generation.
+- Restarted the local `4173` review server so the visible Admin/V2 pages use the current code.
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\ai\rule_based_provider.mjs`
+- HTTP `/api/ask` check returned readable Korean answer text with `provider=rule_based` and research summary.
+- HTTP `/api/comments/2026-05-21/ai-draft` check returned a readable Korean draft header with provider/source/research summary.
+- `scripts\Verify-Pipeline.ps1` now includes a readable-text guard for AI market answers and AI-assisted draft output so mojibake-like fallback text is caught during smoke tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server is still reachable on `http://127.0.0.1:4173`.
+
+## 2026-05-24 Admin research persistence pass
+
+Continued after Claude's D-016~D-020 operations-policy commit. That commit changed `HANDOFF.md` only; no code was changed there.
+
+Implemented the next Admin/AI automation bridge without mutating Supabase report data:
+
+- Added local research persistence for `data/research/research_YYYY-MM-DD.json`.
+- Added `POST`/`PUT /api/research/{date}` to save normalized research items.
+- Kept `GET /api/research/{date}` as the read path and added deduping in AI context assembly.
+- Admin comment workflow can now add manual/news/Telegram/historical/source-note research items, set relevance, include/exclude them, delete them, and save the list.
+- AI-assisted draft generation now sends only currently included research items.
+- Public report V2 chat now reads `/api/research/{date}` and sends included items into `/api/ask`.
+- Extended `scripts/Verify-Pipeline.ps1` with a non-Supabase research save/reload check using temporary date `2099-01-02`; the temporary file is removed after the smoke test.
+
+Verification:
+
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\report_v2\app.js`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server was started on `http://127.0.0.1:4173/admin` and `/report-v2`.
+
+Browser visual verification was attempted through the Codex in-app browser, but the `iab` browser was unavailable in this session. Edge headless screenshots were refreshed instead:
+
+- `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+- `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
 ## 2026-05-23 scope clarification
 
 Final target is not just a prettier daily report screen. The target is a professional treasury daily-report system that can generate, validate, comment on, and publish the report reliably even when the primary operator is absent.
@@ -265,6 +506,34 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 
 ## 지금 바로 할 일
 
+**최우선 — 투자자 동향(investor_flows) Supabase 반영** (2026-05-25 추가)
+
+배경: 지표 매핑이 35개 → 50개로 복원됐고(투자자 동향 15개 포함), 로컬 워크북 추출/coverage는 50개 정상이다. 그러나 현재 라이브 최신 리포트 `2026-05-21`은 아직 예전 35-observation payload라서 Admin/API/공개 V2의 `주식·투자자` 카드에 투자자 동향이 비어 있다. 코드/문서는 비파괴 검증까지만 했고 Supabase는 아직 안 바꿨다.
+
+다음 사람이 할 일 (인포맥스 PC 또는 Supabase 네트워크가 되는 운영 PC에서):
+
+1. 재업로드 전 사전 확인
+   - `git pull` → `scripts\check-workspace-sync.cmd`로 최신 매핑(50개) 코드를 받았는지 확인.
+   - `scripts\10_check_excel_coverage.cmd` 실행 → mapped 50 / extracted 50 / missing 0 재확인.
+   - 워크북 `선물투자자별순매수금액`, `주식투자자별순매수금액` 시트에 `2026-05-21` 일자 히스토리 값이 남아 있는지 확인(과거 일자 재추출이 가능해야 함).
+   - (D-023, 함께 처리) 은행채 AAA를 다시 넣을 거면 이 재업로드 전에 매핑을 추가한다: `국내금리` 시트에서 은행채 AAA 열 위치(3개월/1/2/3/5/10년) 확인 → `scripts\Export-MarketDailyCachedValues.ps1`와 `scripts\import_historical_market_data.py` 양쪽에 추가(`category=credit`, `unit=%`, `ChangeMode=rate_bp`, 권장 시작 1년·2년·3년) → `scripts\10_check_excel_coverage.cmd`로 mapped==extracted 확인. 그러면 같은 재업로드로 은행채까지 한 번에 반영된다. 공개 V2는 `credit` 지표를 자동 표시하므로 UI 변경 불필요.
+2. `2026-05-21` 재생성·재업로드 (이미 엑셀에 값이 있으므로 새로고침 없이):
+   ```powershell
+   powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -FromDate 2026-05-21 -UntilDate 2026-05-21 -SkipRefresh
+   ```
+   - 필요하면 최근 구간 백필: `-FromDate 2026-05-18 -UntilDate 2026-05-21 -SkipRefresh`.
+   - 주의: 이 단계는 Supabase를 실제로 바꾸는 파괴적 작업이다. Codex 샌드박스/네트워크 차단 환경(`WinError 10013`)에서는 실패하므로 외부망 PC에서 실행한다.
+3. 업로드 후 검증
+   - `/api/reports/2026-05-21`의 observations가 50으로 늘었는지 확인.
+   - Admin/공개 V2 `주식·투자자` 카드에 `투자자 동향` 그룹 행이 표시되는지 육안 확인.
+   - `scripts\09_validate_daily_data.cmd`로 post-upload validation `pass` 확인.
+4. 앞으로의 일일 배치 확인
+   - 07:00 예약 배치는 이제 매핑이 50개라 자동으로 투자자 동향까지 적재된다. 다음 배치(`2026-05-26 07:00`) 결과가 50 observations인지 확인하면 신규 경로가 정상인지 검증된다.
+
+이 작업이 끝나면 이 "최우선" 블록을 제거하고 아래 1단계 항목으로 돌아간다.
+
+---
+
 **1단계 — 데이터 적재/검증/발행 MVP 안정화**
 
 1. Admin 자동화 로그 dogfooding
@@ -452,11 +721,36 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 - **영향**: Admin 서버를 Railway/Render의 Node 템플릿으로 배포. 인포맥스 PC는 Excel 새로고침/추출 잡만 계속 담당(Admin 서버는 호스트 안 함). 본부장 승인 후 회사에 (1) 회사 명의 카톡 비즈니스 계정 발급, (2) Railway 호스팅 비용 이관, (3) 회사 승인 배포 위치로 이전 검토를 요청.
 - **BCM 효과**: 운영자 PC가 데이터 파이프라인 + 운영자 UI 둘 다 호스트하는 단일 장애점이 풀린다.
 
+### D-021 — 공개 V2 브랜딩은 카카오뱅크 로고(중립 검정), 장식 노란색 제거
+공개 리포트 V2 좌측 사이드 브랜드를 카카오뱅크 로고로 교체한다. 가로형 시그니처(Primary Black)를 기본으로 쓰고, 축소 사이드바에서는 심볼만 노출한다. 기존 노란 박스/사이드 노트(`KB / Treasury market brief.`) 등 장식 요소는 제거한다.
+- **결정일**: 2026-05-25
+- **Why**: 운영자가 카카오뱅크 로고 리소스를 제공했고, 실제 부서 산출물로 보이려면 브랜드가 명확해야 한다. 단 D-002/“절대 건드리지 말 것”의 컴플라이언스 원칙(중립 팔레트)은 유지하므로 Primary Black 로고만 쓰고 카카오뱅크 노란색을 테마 색으로 도입하지 않는다.
+- **영향**: `report_v2/index.html` 사이드 브랜드 마크업, `styles.css` `.brand-logo*`, 로고 SVG 2종을 `report_v2/`에 배치. 상승/하락 색(D-002)과 전체 팔레트는 불변.
+
+### D-022 — 공개 V2 2x2 카드 = 금리·크레딧 / 주식·투자자(+암호화폐) / 환율 / 원자재
+공개 리포트 V2 하단 시장 데이터 카드를 4분할로 재편한다. 은행채는 `금리·크레딧`, 암호화폐와 투자자 순매수(선물/주식 전체)는 `주식·투자자` 카드에 넣는다. 환율은 단독, 원자재 단독.
+- **결정일**: 2026-05-25
+- **Why**: 채권 운용 데스크 관점에서 은행채는 크레딧 성격이라 금리·크레딧과 함께 읽힌다. 암호화폐는 위험자산이라 주식과 같은 카드가 직관적이다. 투자자 순매수까지 주식 카드에 모으면 4개 카드 부피가 2x2로 비교적 균형 있게 맞는다(운영자 판단).
+- **영향**: `report_v2/app.js` `CATEGORY_META`/`CATEGORY_ORDER`/`metricTone`(crypto→green). 투자자 동향은 표 15행 대신 `renderFlowsBlock` 컴팩트 블록으로 카드 안에 렌더. 추출 단계 카테고리(`investor_flows`, `crypto`)는 그대로이고, 카드 묶음만 UI 레벨 결정이다.
+- **주의**: 투자자 동향은 Supabase 재업로드 후에야 표시된다(D-... 투자자 동향 재업로드 작업과 동일 의존).
+
+### D-023 — 은행채 재도입 (intended_exclusion 해제 → credit)
+`docs/EXCEL_COVERAGE.md`에서 intended_exclusion이던 은행채 AAA를 다시 추출 대상으로 넣는다. 카테고리는 `credit`.
+- **결정일**: 2026-05-25
+- **Why**: 원본 엑셀에 있던 은행채가 현재 리포트 지표 세트에서 빠져 있다는 운영자 확인. 금리·크레딧 카드에 다시 필요하다.
+- **영향**: `scripts/Export-MarketDailyCachedValues.ps1`와 `scripts/import_historical_market_data.py` 양쪽 매핑에 은행채 AAA 만기를 추가(권장 시작: 1년·2년·3년, `category=credit`, `unit=%`, `ChangeMode=rate_bp`). 정확한 열 위치는 인포맥스 PC 워크북 `국내금리` 시트에서 확인해야 하며, 추가 후 재추출/재업로드가 필요하다. V2 UI는 `credit` 지표를 자동 표시하므로 추가 코드 변경은 없다.
+
 ---
 
 ## 작업 일지 (최근 5건만 유지, 시간 역순)
 
 > 그 이전 history는 `git log` 로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
+
+### 2026-05-25 — Claude — 공개 V2 UI 리파인 (브랜딩/카드/트렌드/달력)
+사용자 2차 리뷰 11건 반영(상단 `2026-05-25 V2 UI refinement` 상세 + D-021~D-023 참조). 카카오뱅크 로고로 사이드 브랜드 교체(가로 시그니처/축소 시 심볼, 중립 검정 유지), 노란 박스·`KB/Treasury` 노트 제거. Market Watch 카드+"4" 제거 후 Daily Brief 전체 폭. 오버뷰 트렌드 헤더 `1M Trends/월간 추이`, 미니차트 ~22거래일 슬라이스, 슬롯 제목 동적화, 하단 날짜범위(가로축)+세로축 최소/최대. 긴 select 2곳을 커스텀 팝오버로: 트렌드 지표(그룹+검색), 리포트 날짜(이전/다음+월 달력, 리포트 날짜만 활성). 2x2 재편(금리·크레딧 / 주식·투자자+암호화폐+순매수 / 환율 / 원자재), 투자자 동향은 `renderFlowsBlock` 컴팩트 블록. 은행채는 `credit`로 재도입 결정(매핑+재업로드는 인포맥스 PC 작업). 검증: `node --check` 2파일, 임시포트 정적자산/로고 SVG 200, Edge headless 데스크탑/모바일 스크린샷 재캡처, `Verify-Pipeline.ps1` 전 항목 통과(latest 2026-05-21, obs 35, KOSPI 289). 데이터 주의: 로컬 `/api/history`가 일부 04-08까지만이라 1M차트가 리포트일까지 안 닿음 = freshness 이슈(코드 무관).
+
+### 2026-05-25 — Codex/Claude — V2 트렌드/투자자 동향 후속 + 인수인계 정리
+Codex가 끊긴 공개 V2 리뷰 프롬프트를 이어 처리했다(상단 `2026-05-25 V2 trend/investor-flow follow-up` 상세 참조). 핵심: 투자자 동향 데이터는 엑셀에 있고 매핑이 35→50개로 복원됐으나(투자자 동향 15개 포함), 라이브 최신 `2026-05-21`은 아직 35-observation payload라 Supabase 재업로드 전까지는 화면에 안 뜬다. Overview 트렌드 3카드 드롭다운(기본 국고3년/KOSPI/원달러), 별도 Trend Lab 상세 화면, 하단 2x2 카드 내부 국내/해외 그룹 구분, 크레딧 스프레드 위치 정리, 모바일 클리핑 수정 완료. 검증: `node --check`, coverage 50/50/missing 0, `Verify-Pipeline.ps1`, `final-readiness.cmd` 통과(전부 비파괴). 이어서 Claude가 인수인계 정리: `docs/EXCEL_COVERAGE.md` 인벤토리 표에 누락됐던 투자자 동향 15행 추가 + operational source 시트 2개 추가, `지금 바로 할 일`에 투자자 동향 Supabase 재업로드를 최우선 항목으로 명시. 다음 할 일은 외부망 PC에서 `2026-05-21` 재업로드(파괴적, Codex 미실행).
 
 ### 2026-05-22 — Claude — Admin 화면도 URL ↔ 날짜 동기화/에러 처리 정렬
 공개 리포트와 동일한 패턴을 Admin에도 적용했다. (1) `loadReport(date)`가 try/catch 없이 fetch 실패 시 `state.currentDate`만 업데이트되고 `state.currentReport`는 옛 데이터로 남아 화면이 불일치되는 버그를 잡아 한글 에러 메시지를 표 영역에 표시한다. (2) `?date=YYYY-MM-DD`를 부팅 시 읽고, 날짜 select 변경/리포트 로드 시 `history.replaceState`로 URL을 동기화. 운영자가 특정 날짜를 살펴본 뒤 새로고침해도 같은 화면이 유지된다. (3) 빈 리포트 리스트 가드 보강. 변경 사유: `/report`만 일관성 있고 Admin은 옛날 패턴이면 운영자가 헷갈리고 *시니어 수준*과도 거리가 있어 정렬. node --check 및 verify-pipeline 통과. 실제 책갈피 동작은 dogfooding에서 확인 필요.
@@ -466,12 +760,6 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 ### 2026-05-22 — Claude — JSON 파싱 실패를 400으로 매핑
 Admin POST 엔드포인트를 일괄 점검하다가 잘못된 JSON 본문이 모두 500 "Unexpected token"으로 새는 것을 확인. `readBody()`의 `JSON.parse`를 try/catch로 감싸 `statusCode=400`을 부여하고 원래 SyntaxError 메시지를 사용자에게 그대로 전달한다. `Verify-Pipeline.ps1`의 `Invoke-StatusCheck`을 Method/Body 지원으로 확장해 `POST /api/ask`에 잘못된 본문을 보내면 400을 받는지 회귀 테스트로 추가. node --check 및 verify-pipeline 전부 통과. 같은 점검에서 코멘트 저장(`POST /api/comments/<date>`)과 검증 승인(`POST /api/validation/<date>/approvals`)이 여전히 로컬 파일만 보고 Supabase에 있는 날짜에 대해 500/404 잘못된 메시지를 내는 별도 버그를 발견했으며, 이는 다음 라운드에서 Supabase-first 패턴을 코멘트 경로에도 적용해 정리한다.
-
-### 2026-05-22 — Claude — 공개 리포트 URL ↔ 날짜 동기화
-공개 리포트 `/report`가 URL 쿼리 파라미터 `?date=YYYY-MM-DD`를 무시하고 항상 최신 리포트만 띄우는 문제, 날짜 pill을 눌러도 URL이 변하지 않아 책갈피/공유가 불가능한 문제, 그리고 fetch 실패 시 로딩 스피너가 영구 고착되는 문제를 한 번에 정리했다. `loadReports()`가 URL에서 날짜를 읽어 유효하면 그 날짜로 시작하고, `loadReport()`는 매 호출마다 `history.replaceState`로 URL을 갱신한다. 빈 리포트 상태와 단일 날짜 로드 실패도 사용자에게 한국어 안내를 표시한다. node --check, `/report`/`/report/app.js` HTTP 200 확인. 실제 URL 책갈피 동작은 브라우저 클릭 테스트가 필요하므로 운영자 dogfooding에서 확인한다.
-
-### 2026-05-22 — Claude — API 에러 매핑/fallback 버그 수정
-verify-pipeline은 통과했지만 에러 경로 진단에서 두 가지 잠재 버그를 확인했다. (1) 존재하지 않는 날짜 조회 `/api/reports/2099-01-01`이 ENOENT 그대로 500을 반환했다 → 404로 매핑. (2) Supabase 응답이 비어 있을 때 fallback인 `readAllReports`가 Supabase 요약 객체의 `file: null`을 `path.join`에 넘겨 폭발했다 → `readAllReports`를 로컬 디렉터리 직독으로 단순화. 결과: 미존재 리포트는 404, 미존재 metric은 200+빈 points로 깔끔하게 응답. 재발 방지로 `Verify-Pipeline.ps1`에 음수 경로 두 건(`Invoke-StatusCheck` 헬퍼 추가) 회귀 테스트 추가. node --check + verify-pipeline 전부 통과.
 
 ---
 
