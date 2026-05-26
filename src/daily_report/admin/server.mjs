@@ -1082,6 +1082,82 @@ function mapSupabaseComment(row, status = 'draft') {
   };
 }
 
+function sourceDocumentToResearchItem(row = {}) {
+  const text = row.extracted_text || row.summary || '';
+  return {
+    id: row.id,
+    report_date: row.source_date || '',
+    source_type: 'historical_comment',
+    title: row.title || `Historical comment ${row.source_date || ''}`.trim(),
+    url: '',
+    published_at: row.source_date || '',
+    author: 'historical_ocr',
+    text,
+    relevance: 'medium',
+    included: true,
+    metadata: {
+      original_source_type: row.source_type || '',
+      file_path: row.file_path || '',
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      source_table: 'source_documents',
+    },
+  };
+}
+
+function historicalCommentTextFromDocuments(rows = []) {
+  const docs = rows
+    .map(sourceDocumentToResearchItem)
+    .filter((item) => String(item.text || '').trim());
+
+  if (!docs.length) return '';
+  return docs[0].text.trim();
+}
+
+async function getHistoricalCommentDocuments(date) {
+  if (!isDate(date)) return [];
+
+  try {
+    const rows = await supabaseRest(
+      'GET',
+      `source_documents?select=id,source_type,source_date,title,file_path,extracted_text,summary,tags,created_at&source_date=eq.${date}&order=created_at.desc&limit=20`,
+    );
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+      const tags = Array.isArray(row.tags) ? row.tags.map((tag) => String(tag).toLowerCase()) : [];
+      const sourceType = String(row.source_type || '').toLowerCase();
+      return sourceType.includes('historical') || tags.includes('comment') || tags.includes('ocr');
+    });
+  } catch (error) {
+    console.warn(`Historical source_documents unavailable for ${date}: ${error.message}`);
+    return [];
+  }
+}
+
+async function mapSupabaseCommentWithFallback(row, status = 'draft') {
+  const comment = mapSupabaseComment(row.report_comments, status);
+  if (comment.final_comment || comment.auto_comment) return comment;
+
+  const historicalDocs = await getHistoricalCommentDocuments(row.report_date);
+  const historicalComment = historicalCommentTextFromDocuments(historicalDocs);
+  if (!historicalComment) return comment;
+
+  return {
+    ...comment,
+    auto_comment: historicalComment,
+    reference_note: comment.reference_note || 'Loaded from historical OCR source_documents.',
+    tags: [...new Set([...(comment.tags || []), 'historical', 'ocr'])],
+    historical_comment_source: 'source_documents',
+  };
+}
+
+async function bestEffortSupabase(method, endpoint, body, label) {
+  try {
+    return await supabaseRest(method, endpoint, body === null ? undefined : body);
+  } catch (error) {
+    console.warn(`${label} unavailable: ${error.message}`);
+    return null;
+  }
+}
+
 function mapSupabaseObservation(row) {
   return {
     observed_date: row.observed_date,
@@ -1142,7 +1218,7 @@ async function readSupabaseReport(date) {
     `market_observations?select=observed_date,category,metric_key,metric_name,value,unit,change_1d,change_1d_unit,change_ytd,change_ytd_unit,source,source_sheet,source_cell,raw_value&report_id=eq.${row.id}&order=created_at.asc`,
   );
   const observations = Array.isArray(observationRows) ? observationRows.map(mapSupabaseObservation) : [];
-  const comment = mapSupabaseComment(row.report_comments, row.status);
+  const comment = await mapSupabaseCommentWithFallback(row, row.status);
   const report = {
     id: row.id,
     report_date: row.report_date,
@@ -1154,6 +1230,10 @@ async function readSupabaseReport(date) {
     comment,
     source: 'supabase',
   };
+  const [commentVersions, approvalEvents] = await Promise.all([
+    getCommentVersions(date),
+    getApprovalEvents(date),
+  ]);
 
   await mkdir(outputDir, { recursive: true });
   const reviewHtmlPath = path.join(outputDir, `market_daily_${date}.review.html`);
@@ -1161,6 +1241,8 @@ async function readSupabaseReport(date) {
 
   return {
     ...report,
+    comment_versions: commentVersions,
+    approval_events: approvalEvents,
     preview_html: `output/market_daily_${date}.review.html`,
     original_html: `output/market_daily_${date}.html`,
   };
@@ -1272,6 +1354,8 @@ async function readReport(date) {
   return {
     ...report,
     comment,
+    comment_versions: [],
+    approval_events: [],
     preview_html: previewHtml,
     original_html: `output/market_daily_${date}.html`,
   };
@@ -1418,16 +1502,21 @@ async function readResearchItems(date) {
     throw error;
   }
 
+  const historicalItems = (await getHistoricalCommentDocuments(date)).map(sourceDocumentToResearchItem);
   const researchPath = path.join(researchDir, `research_${date}.json`);
+  let localItems = [];
   try {
     const raw = await readFile(researchPath, 'utf8');
     const parsed = parseJson(raw);
-    const items = Array.isArray(parsed) ? parsed : parsed.items;
-    return normalizeResearchItems(items, { report_date: date });
+    localItems = Array.isArray(parsed) ? parsed : parsed.items;
   } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
+    if (error.code !== 'ENOENT') throw error;
   }
+
+  return dedupeResearchItems([
+    ...normalizeResearchItems(localItems, { report_date: date }),
+    ...normalizeResearchItems(historicalItems, { report_date: date }),
+  ]);
 }
 
 async function writeResearchItems(date, payload = {}) {
@@ -1619,6 +1708,7 @@ async function saveComment(date, payload) {
   await writeFile(commentPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   await writeFile(sqlPath, sql, 'utf8');
   await writeFile(reviewHtmlPath, reviewHtml, 'utf8');
+  await recordCommentVersion(date, normalized, 'local_save');
 
   return {
     comment: normalized,
@@ -1694,6 +1784,70 @@ function normalizeCommentPayload(date, payload) {
   };
 }
 
+async function recordCommentVersion(date, normalized, eventType = 'comment_saved') {
+  const row = await getReportRowByDate(date);
+  if (!row?.id) return null;
+
+  return bestEffortSupabase('POST', 'comment_versions', [{
+    report_id: row.id,
+    report_date: date,
+    event_type: eventType,
+    auto_comment: normalized.auto_comment || null,
+    final_comment: normalized.final_comment || null,
+    reference_note: normalized.reference_note || null,
+    status: normalized.status,
+    created_by: normalized.approved_by || null,
+    metadata: {
+      source: 'admin',
+      tags: normalized.tags || [],
+    },
+  }], 'comment_versions');
+}
+
+async function recordApprovalEvent(date, event = {}) {
+  const row = await getReportRowByDate(date);
+  if (!row?.id) return null;
+
+  return bestEffortSupabase('POST', 'approval_events', [{
+    report_id: row.id,
+    report_date: date,
+    event_type: event.event_type || 'approval',
+    target_type: event.target_type || 'report',
+    target_key: event.target_key || null,
+    status_from: event.status_from || null,
+    status_to: event.status_to || null,
+    approved_by: event.approved_by || null,
+    reason: event.reason || null,
+    metadata: event.metadata || {},
+  }], 'approval_events');
+}
+
+async function getCommentVersions(date) {
+  const row = await getReportRowByDate(date);
+  if (!row?.id) return [];
+
+  const rows = await bestEffortSupabase(
+    'GET',
+    `comment_versions?select=id,event_type,status,created_by,created_at,auto_comment,final_comment,reference_note,metadata&report_id=eq.${row.id}&order=created_at.desc&limit=20`,
+    null,
+    'comment_versions',
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getApprovalEvents(date) {
+  const row = await getReportRowByDate(date);
+  if (!row?.id) return [];
+
+  const rows = await bestEffortSupabase(
+    'GET',
+    `approval_events?select=id,event_type,target_type,target_key,status_from,status_to,approved_by,reason,metadata,created_at&report_id=eq.${row.id}&order=created_at.desc&limit=50`,
+    null,
+    'approval_events',
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function previewSupabaseReportComment(date, payload) {
   validateCommentForStatus(payload);
 
@@ -1749,6 +1903,24 @@ async function updateSupabaseReportComment(date, payload) {
     status: normalized.status,
     published_at: normalized.status === 'published' ? new Date().toISOString() : null,
   });
+
+  await recordCommentVersion(date, normalized, 'admin_save');
+  if (['reviewed', 'published'].includes(normalized.status)) {
+    await recordApprovalEvent(date, {
+      event_type: normalized.status === 'published' ? 'report_published' : 'comment_reviewed',
+      target_type: 'comment',
+      status_from: null,
+      status_to: normalized.status,
+      approved_by: normalized.approved_by,
+      reason: normalized.status === 'published'
+        ? 'Operator approved publication.'
+        : 'Operator reviewed the comment.',
+      metadata: {
+        has_final_comment: Boolean(normalized.final_comment),
+        has_auto_comment: Boolean(normalized.auto_comment),
+      },
+    });
+  }
 
   const report = await readSupabaseReport(date);
   return {
@@ -1827,6 +1999,23 @@ async function uploadReportToSupabase(date, payload) {
     approved_by: comment.approved_by || null,
     approved_at: approvedAt,
   }]);
+
+  await recordCommentVersion(date, comment, 'admin_save');
+  if (['reviewed', 'published'].includes(comment.status)) {
+    await recordApprovalEvent(date, {
+      event_type: comment.status === 'published' ? 'report_published' : 'comment_reviewed',
+      target_type: 'comment',
+      status_to: comment.status,
+      approved_by: comment.approved_by,
+      reason: comment.status === 'published'
+        ? 'Operator approved publication.'
+        : 'Operator reviewed the comment.',
+      metadata: {
+        has_final_comment: Boolean(comment.final_comment),
+        has_auto_comment: Boolean(comment.auto_comment),
+      },
+    });
+  }
 
   return {
     ...saved,
@@ -2018,6 +2207,21 @@ async function approveValidation(date, payload = {}) {
     'validation_approvals?on_conflict=report_id,metric_key,source',
     [row],
   );
+
+  await recordApprovalEvent(date, {
+    event_type: 'validation_approved',
+    target_type: 'metric',
+    target_key: metricKey,
+    approved_by: row.approved_by,
+    reason: row.reason,
+    metadata: {
+      metric_name: row.metric_name,
+      source: row.source,
+      symbol: row.symbol,
+      db_value: row.db_value,
+      external_value: row.external_value,
+    },
+  });
 
   return {
     approval: Array.isArray(rows) ? rows[0] : rows,

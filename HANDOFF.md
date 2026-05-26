@@ -1,5 +1,30 @@
 # Daily Report Handoff
 
+## 2026-05-27 Admin redesign — workflow-first single screen
+
+사용자 피드백(코덱스 상태보드 4카드/4탭 구조가 실제 업무와 안 맞음)을 받아 Admin을 "한 화면에서 상태 파악 → 데이터 보며 코멘트 작성 → 실물 검증 → 발행" 흐름으로 재설계했다. `src/daily_report/admin/{index.html,app.js,styles.css}`만 수정(서버 API 무변경).
+
+- 4탭(데이터/미리보기/코멘트/검증) 제거 → 단일 `report` 화면 + `jobs`(자동화 로그) 두 뷰만. 4개 상태카드 → 상단 한 줄 `statusbar` 칩(데이터 N개 / 검증 / draft).
+- 레이아웃: 좌우 균형 2단 `report-grid`(minmax(0,1fr) 2개). **좌=시장 데이터**(`data-column`, sticky + 패널 내부 스크롤 + thead 고정), **우=코멘트**(메모→초안→최종→발행 step-card). 리서치 근거·이력은 `collapse-card`로 접어둠.
+- 데이터 좌측 쏠림 수정: `.data-table { width: min(100%,900px) }` → `width:100%`.
+- 검증 자동화: 날짜 열면 `runValidation({silent:true})` 자동 실행. 통과면 칩 `검증 통과`, 차이 날 때만 상단 주황 `validation-banner`로 알림 → `상세·승인` 모달.
+- 미리보기 = 실제 V2: 기존 `output/market_daily_*.html`(옛 생성물) → **`/report-v2?date=`**(독자가 보는 실물, 코멘트 반영). 상단 `[V2 미리보기]` → 큰 모달 iframe. 저장 시 열려 있으면 새로고침.
+- 제목 단순화: `Comment Workflow / Daily Report YYYY-MM-DD` 제거 → statusbar에 `Comment`만. 좌측 사이드바 `DR` 브랜드 박스 제거.
+- 상태 드롭다운(draft/reviewed/published) 제거 → 버튼 2개: `임시저장`(draft) / `저장 및 발행`(published). `reviewed`는 UI에서만 제거(서버 감사 로그 기능은 유지). `saveComment(status)`로 통합. 상태값은 독자 리포트 배지 라벨만 바꾸고 공개 여부엔 무관.
+
+같이 커밋된 선행 변경(이전 세션/codex): `db/schema.sql` + 신규 `db/comment_versions_approval_events.sql`(comment_versions/approval_events 테이블), `server.mjs`(source_documents 과거 코멘트 fallback, 이력 best-effort). 새 테이블은 Supabase SQL Editor에서 1회 적용해야 이력 저장이 실제 동작.
+
+검증:
+
+- `node --check src\daily_report\admin\app.js` 통과.
+- index.html ↔ app.js id 매핑 64개 누락·중복 0, HTML 태그 균형 확인.
+- `scripts\Verify-Pipeline.ps1` 전 항목 통과(latest 2026-05-21, observations 35, KOSPI 289포인트).
+
+다음 할 일(선택):
+- 시장 데이터 변동폭順 자동 정렬(움직인 지표 먼저) — 미적용, 현재 카테고리 순.
+- 새 이력 테이블 Supabase 적용(`db/comment_versions_approval_events.sql`).
+- 실기기에서 좌우 비율/미리보기 모달 크기 사용성 확인.
+
 ## 2026-05-25 V2 UI refinement (branding/cards/trend/calendar)
 
 사용자 2차 공개 V2 리뷰 11개 피드백을 반영했다. 의사결정은 D-021~D-023, 상세 플랜은 plan 파일(`ethereal-orbiting-simon.md`) 참고.

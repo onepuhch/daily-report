@@ -9,13 +9,6 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand-block">
-          <div class="brand-mark">DR</div>
-          <div>
-            <h1>Daily Report</h1>
-            <p>Admin</p>
-          </div>
-        </div>
         <div class="sidebar-section">
           <div class="section-label">Workspace</div>
           <nav class="sidebar-menu" aria-label="admin menu">
@@ -29,161 +22,74 @@
       </aside>
 
       <main class="workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">Market Daily</p>
-            <h2 id="reportTitle">리포트를 불러오는 중</h2>
+        <header id="statusbar" class="statusbar">
+          <div class="statusbar-left">
+            <h2 id="reportTitle" class="statusbar-title">Comment</h2>
+            <select id="reportSelect" class="report-select" aria-label="리포트 날짜 선택"></select>
+            <div class="status-chips" aria-label="report status">
+              <span id="chipData" class="status-chip">데이터 -</span>
+              <span id="chipValidation" class="status-chip">검증 대기</span>
+              <span id="chipComment" class="status-chip">draft</span>
+            </div>
           </div>
-          <div class="topbar-actions">
+          <div class="statusbar-actions">
+            <span class="statusbar-generated">생성 <strong id="summaryGenerated">-</strong></span>
+            <button id="openPreviewButton" class="button secondary" type="button">V2 미리보기</button>
             <button id="refreshButton" class="button ghost" type="button">새로고침</button>
           </div>
         </header>
 
-        <section id="summaryStrip" class="summary-strip" aria-label="report summary">
-          <div>
-            <span class="summary-label">Date</span>
-            <select id="reportSelect" class="report-select" aria-label="리포트 날짜 선택"></select>
+        <div id="validationBanner" class="validation-banner" hidden>
+          <div class="validation-banner-text">
+            <strong>검증: <span id="validationBannerCount">0</span>개 지표가 Yahoo와 차이가 있습니다.</strong>
+            <span id="validationBannerMetrics"></span>
           </div>
-          <div>
-            <span class="summary-label">Generated</span>
-            <strong id="summaryGenerated">-</strong>
-          </div>
-          <div>
-            <span class="summary-label">Status</span>
-            <strong id="summaryStatus">draft</strong>
-          </div>
-        </section>
+          <button id="validationBannerDetail" class="button secondary" type="button">상세·승인</button>
+        </div>
 
-        <nav id="workspaceTabs" class="workspace-tabs" aria-label="admin sections">
-          <button id="dataTabButton" class="workspace-tab active" type="button" data-view="data">데이터</button>
-          <button id="previewTabButton" class="workspace-tab" type="button" data-view="preview">미리보기</button>
-          <button id="commentTabButton" class="workspace-tab" type="button" data-view="comment">코멘트</button>
-          <button id="validationTabButton" class="workspace-tab" type="button" data-view="validation">검증</button>
-        </nav>
-
-        <section id="dataView" class="data-pane admin-view active">
-          <div class="pane-header">
-            <div>
-              <p class="eyebrow">Numbers</p>
-              <h3>시장 데이터</h3>
-            </div>
-            <div id="categoryTabs" class="category-tabs"></div>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <colgroup>
-                <col class="data-col-number">
-                <col class="data-col-metric">
-                <col class="data-col-value">
-                <col class="data-col-change">
-                <col class="data-col-change">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>No.</th>
-                  <th>지표</th>
-                  <th>값</th>
-                  <th>전일대비</th>
-                  <th>작년말대비</th>
-                </tr>
-              </thead>
-              <tbody id="metricRows"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <section id="previewView" class="preview-pane admin-view" hidden>
-          <div class="pane-header">
-            <div>
-              <p class="eyebrow">Preview</p>
-              <h3>HTML 미리보기</h3>
-            </div>
-            <a id="previewOpenLink" class="button secondary" href="#" target="_blank" rel="noreferrer">새 창에서 열기</a>
-          </div>
-          <iframe id="previewFrame" class="preview-frame" title="HTML report preview"></iframe>
-        </section>
-
-        <section id="commentView" class="comment-workspace admin-view" hidden>
-          <section class="data-pane">
+        <section id="reportView" class="report-grid">
+          <section class="data-pane data-column">
             <div class="pane-header">
               <div>
-                <p class="eyebrow">Source Review</p>
-                <h3>리서치 근거</h3>
+                <p class="eyebrow">Numbers</p>
+                <h3>시장 데이터</h3>
               </div>
-              <button id="reloadResearchButton" class="button secondary" type="button">근거 새로고침</button>
             </div>
-            <div id="researchSummary" class="research-summary empty-state">
-              리서치 근거를 불러오는 중입니다.
+            <div id="categoryTabs" class="category-tabs data-category-tabs"></div>
+            <div class="table-wrap data-column-scroll">
+              <table class="data-table">
+                <colgroup>
+                  <col class="data-col-number">
+                  <col class="data-col-metric">
+                  <col class="data-col-value">
+                  <col class="data-col-change">
+                  <col class="data-col-change">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>No.</th>
+                    <th>지표</th>
+                    <th>값</th>
+                    <th>전일대비</th>
+                    <th>작년말대비</th>
+                  </tr>
+                </thead>
+                <tbody id="metricRows"></tbody>
+              </table>
             </div>
-            <form id="researchForm" class="research-form">
-              <div class="form-grid">
-                <label class="field">
-                  <span>제목</span>
-                  <input id="researchTitleInput" type="text" placeholder="예: 금리 상승 배경 메모">
-                </label>
-                <label class="field">
-                  <span>유형</span>
-                  <select id="researchTypeInput">
-                    <option value="manual_note">운영 메모</option>
-                    <option value="google_news">뉴스</option>
-                    <option value="telegram">텔레그램</option>
-                    <option value="historical_comment">과거 코멘트</option>
-                    <option value="bond_market_note">채권시장 메모</option>
-                    <option value="market_data_note">시장 데이터 메모</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>중요도</span>
-                  <select id="researchRelevanceInput">
-                    <option value="medium">보통</option>
-                    <option value="high">높음</option>
-                    <option value="low">낮음</option>
-                  </select>
-                </label>
-              </div>
-              <label class="field">
-                <span>내용</span>
-                <textarea id="researchTextInput" rows="3" placeholder="AI 초안에 반영할 근거나 운용자 판단 메모를 입력합니다."></textarea>
-              </label>
-              <label class="field">
-                <span>URL</span>
-                <input id="researchUrlInput" type="url" placeholder="https://...">
-              </label>
-              <div class="research-actions">
-                <button id="addResearchButton" class="button secondary" type="button">근거 추가</button>
-                <button id="saveResearchButton" class="button primary" type="button">근거 저장</button>
-                <span id="researchSaveMessage" class="save-message"></span>
-              </div>
-            </form>
-            <div id="sourceRows" class="source-list"></div>
           </section>
 
-          <aside class="comment-pane stepper">
-            <div class="pane-header compact">
-              <div>
-                <p class="eyebrow">Comment Workflow</p>
-                <h3>코멘트 작성</h3>
-              </div>
-              <select id="statusInput" aria-label="status">
-                <option value="draft">draft</option>
-                <option value="reviewed">reviewed</option>
-                <option value="published">published</option>
-              </select>
-            </div>
-            <p id="commentStatusHelp" class="status-help">
-              reviewed/published 상태는 최종 코멘트 또는 초안 코멘트가 있어야 저장됩니다. AI 초안은 검토용이며 발행은 별도 저장 버튼에서만 실행됩니다.
-            </p>
-
+          <section class="comment-column">
             <section class="step-card" data-step="1">
               <header class="step-header">
                 <span class="step-number">1</span>
                 <div>
                   <h4>운영 메모</h4>
-                  <p>텔레그램, 뉴스, 내부 메모 등 코멘트 작성에 반영할 내용을 붙여 넣습니다.</p>
+                  <p>텔레그램·뉴스·내부 메모 등 코멘트에 반영할 내용을 붙여 넣습니다.</p>
                 </div>
               </header>
               <label class="field">
-                <textarea id="referenceInput" rows="8" placeholder="당일 뉴스, 텔레그램 메시지, 내부 메모, 수급 특이사항을 붙여 넣으세요."></textarea>
+                <textarea id="referenceInput" rows="5" placeholder="당일 뉴스, 텔레그램 메시지, 내부 메모, 수급 특이사항을 붙여 넣으세요."></textarea>
               </label>
             </section>
 
@@ -201,7 +107,7 @@
                 <button id="aiDraftButton" class="button secondary" type="button">AI 보조 초안</button>
               </div>
               <label class="field">
-                <textarea id="autoCommentInput" rows="8" placeholder="초안 결과가 여기에 표시됩니다. 최종 코멘트로 옮기기 전에 검토하세요."></textarea>
+                <textarea id="autoCommentInput" rows="5" placeholder="초안 결과가 여기에 표시됩니다. 최종 코멘트로 옮기기 전에 검토하세요."></textarea>
               </label>
               <div class="draft-copy-row">
                 <button id="copyDraftButton" class="button secondary" type="button">초안을 최종 코멘트로 복사</button>
@@ -220,42 +126,76 @@
                 </div>
               </header>
               <label class="field">
-                <textarea id="finalCommentInput" rows="8" placeholder="최종 발행 문장을 작성합니다."></textarea>
+                <textarea id="finalCommentInput" rows="7" placeholder="최종 발행 문장을 작성합니다."></textarea>
               </label>
-              <button id="uploadButton" class="button primary full-width" type="button">저장 및 발행</button>
+              <div class="publish-row">
+                <button id="saveDraftButton" class="button secondary" type="button">임시저장</button>
+                <button id="uploadButton" class="button primary" type="button">저장 및 발행</button>
+              </div>
+              <p id="commentStatusHelp" class="status-help">
+                임시저장은 리포트에 '초안' 라벨로, 저장 및 발행은 '발행완료' 라벨로 표시됩니다. 발행하려면 코멘트 문안이 있어야 합니다.
+              </p>
               <p id="saveMessage" class="save-message" role="status"></p>
             </section>
-          </aside>
-        </section>
 
-        <section id="validationView" class="validation-pane admin-view" hidden>
-          <div class="pane-header">
-            <div>
-              <p class="eyebrow">Validation</p>
-              <h3>데이터 검증</h3>
-            </div>
-            <button id="runValidationButton" class="button secondary" type="button">검증 실행</button>
-          </div>
-          <div id="validationSummary" class="validation-summary empty-state">
-            검증 실행 버튼을 누르면 현재 선택한 날짜의 Supabase 반영 여부와 Yahoo Finance 대조 결과가 표시됩니다.
-          </div>
-          <div class="table-wrap">
-            <table class="validation-table">
-              <thead>
-                <tr>
-                  <th>지표</th>
-                  <th>심볼</th>
-                  <th>DB</th>
-                  <th>Yahoo 값</th>
-                  <th>결과</th>
-                  <th>링크</th>
-                  <th>승인</th>
-                </tr>
-              </thead>
-              <tbody id="validationRows"></tbody>
-            </table>
-          </div>
-          <div id="validationMessages" class="validation-messages"></div>
+            <details class="collapse-card">
+              <summary>리서치 근거 <span id="researchCount" class="collapse-count"></span></summary>
+              <div class="collapse-body">
+                <div class="research-actions-bar">
+                  <div id="researchSummary" class="research-summary empty-state">리서치 근거를 불러오는 중입니다.</div>
+                  <button id="reloadResearchButton" class="button secondary" type="button">근거 새로고침</button>
+                </div>
+                <form id="researchForm" class="research-form">
+                  <div class="form-grid">
+                    <label class="field">
+                      <span>제목</span>
+                      <input id="researchTitleInput" type="text" placeholder="예: 금리 상승 배경 메모">
+                    </label>
+                    <label class="field">
+                      <span>유형</span>
+                      <select id="researchTypeInput">
+                        <option value="manual_note">운영 메모</option>
+                        <option value="google_news">뉴스</option>
+                        <option value="telegram">텔레그램</option>
+                        <option value="historical_comment">과거 코멘트</option>
+                        <option value="bond_market_note">채권시장 메모</option>
+                        <option value="market_data_note">시장 데이터 메모</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>중요도</span>
+                      <select id="researchRelevanceInput">
+                        <option value="medium">보통</option>
+                        <option value="high">높음</option>
+                        <option value="low">낮음</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span>내용</span>
+                    <textarea id="researchTextInput" rows="3" placeholder="AI 초안에 반영할 근거나 운용자 판단 메모를 입력합니다."></textarea>
+                  </label>
+                  <label class="field">
+                    <span>URL</span>
+                    <input id="researchUrlInput" type="url" placeholder="https://...">
+                  </label>
+                  <div class="research-actions">
+                    <button id="addResearchButton" class="button secondary" type="button">근거 추가</button>
+                    <button id="saveResearchButton" class="button primary" type="button">근거 저장</button>
+                    <span id="researchSaveMessage" class="save-message"></span>
+                  </div>
+                </form>
+                <div id="sourceRows" class="source-list"></div>
+              </div>
+            </details>
+
+            <details class="collapse-card">
+              <summary>코멘트 이력</summary>
+              <div class="collapse-body">
+                <div id="commentHistory" class="comment-history empty-state">아직 이력 테이블이 없거나 저장된 이력이 없습니다.</div>
+              </div>
+            </details>
+          </section>
         </section>
 
         <section id="jobsView" class="jobs-pane admin-view" hidden>
@@ -309,6 +249,57 @@
           <summary>원문 로그 보기</summary>
           <pre id="logModalContent" class="log-modal-content">로그를 불러오는 중입니다.</pre>
         </details>
+      </section>
+    </div>
+
+    <div id="previewModal" class="modal-backdrop" hidden>
+      <section class="detail-modal preview-modal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+        <header class="detail-modal-header">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h3 id="previewModalTitle">발행 미리보기 (실제 V2)</h3>
+          </div>
+          <div class="detail-modal-actions">
+            <a id="previewOpenLink" class="button secondary" href="#" target="_blank" rel="noreferrer">새 창에서 열기</a>
+            <button id="closePreviewModalButton" class="button ghost" type="button" aria-label="닫기">닫기</button>
+          </div>
+        </header>
+        <iframe id="previewFrame" class="preview-modal-frame" title="V2 발행 미리보기"></iframe>
+      </section>
+    </div>
+
+    <div id="validationModal" class="modal-backdrop" hidden>
+      <section class="detail-modal" role="dialog" aria-modal="true" aria-labelledby="validationModalTitle">
+        <header class="detail-modal-header">
+          <div>
+            <p class="eyebrow">Validation</p>
+            <h3 id="validationModalTitle">데이터 검증</h3>
+          </div>
+          <div class="detail-modal-actions">
+            <button id="runValidationButton" class="button secondary" type="button">다시 검증</button>
+            <button id="closeValidationModalButton" class="button ghost" type="button" aria-label="닫기">닫기</button>
+          </div>
+        </header>
+        <div id="validationSummary" class="validation-summary empty-state">
+          날짜를 열면 검증이 자동 실행됩니다. Supabase 반영 여부와 Yahoo Finance 대조 결과가 여기에 표시됩니다.
+        </div>
+        <div class="detail-modal-body table-wrap">
+          <table class="validation-table">
+            <thead>
+              <tr>
+                <th>지표</th>
+                <th>심볼</th>
+                <th>DB</th>
+                <th>Yahoo 값</th>
+                <th>결과</th>
+                <th>링크</th>
+                <th>승인</th>
+              </tr>
+            </thead>
+            <tbody id="validationRows"></tbody>
+          </table>
+        </div>
+        <div id="validationMessages" class="validation-messages"></div>
       </section>
     </div>
 

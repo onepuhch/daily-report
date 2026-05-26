@@ -3,8 +3,9 @@ const state = {
   currentDate: null,
   currentReport: null,
   currentCategory: 'all',
-  currentView: 'data',
+  currentView: 'report',
   validationResult: null,
+  validationLoading: false,
   research: null,
   aiProvider: null,
   jobRuns: [],
@@ -17,13 +18,22 @@ const els = {
   jobRunsMenuButton: document.querySelector('#jobRunsMenuButton'),
   reportTitle: document.querySelector('#reportTitle'),
   refreshButton: document.querySelector('#refreshButton'),
-  summaryStrip: document.querySelector('#summaryStrip'),
-  workspaceTabs: document.querySelector('#workspaceTabs'),
+  statusbar: document.querySelector('#statusbar'),
+  chipData: document.querySelector('#chipData'),
+  chipValidation: document.querySelector('#chipValidation'),
+  chipComment: document.querySelector('#chipComment'),
+  validationBanner: document.querySelector('#validationBanner'),
+  validationBannerCount: document.querySelector('#validationBannerCount'),
+  validationBannerMetrics: document.querySelector('#validationBannerMetrics'),
+  validationBannerDetail: document.querySelector('#validationBannerDetail'),
+  reportView: document.querySelector('#reportView'),
   summaryGenerated: document.querySelector('#summaryGenerated'),
-  summaryStatus: document.querySelector('#summaryStatus'),
   categoryTabs: document.querySelector('#categoryTabs'),
+  openPreviewButton: document.querySelector('#openPreviewButton'),
+  previewModal: document.querySelector('#previewModal'),
+  closePreviewModalButton: document.querySelector('#closePreviewModalButton'),
+  researchCount: document.querySelector('#researchCount'),
   metricRows: document.querySelector('#metricRows'),
-  statusInput: document.querySelector('#statusInput'),
   autoCommentInput: document.querySelector('#autoCommentInput'),
   aiDraftTrace: document.querySelector('#aiDraftTrace'),
   referenceInput: document.querySelector('#referenceInput'),
@@ -32,7 +42,9 @@ const els = {
   aiDraftButton: document.querySelector('#aiDraftButton'),
   copyDraftButton: document.querySelector('#copyDraftButton'),
   uploadButton: document.querySelector('#uploadButton'),
+  saveDraftButton: document.querySelector('#saveDraftButton'),
   saveMessage: document.querySelector('#saveMessage'),
+  commentHistory: document.querySelector('#commentHistory'),
   reloadResearchButton: document.querySelector('#reloadResearchButton'),
   researchSummary: document.querySelector('#researchSummary'),
   sourceRows: document.querySelector('#sourceRows'),
@@ -45,14 +57,11 @@ const els = {
   saveResearchButton: document.querySelector('#saveResearchButton'),
   researchSaveMessage: document.querySelector('#researchSaveMessage'),
   aiProviderStatus: document.querySelector('#aiProviderStatus'),
-  dataView: document.querySelector('#dataView'),
-  previewView: document.querySelector('#previewView'),
   previewFrame: document.querySelector('#previewFrame'),
   previewOpenLink: document.querySelector('#previewOpenLink'),
-  commentView: document.querySelector('#commentView'),
-  validationView: document.querySelector('#validationView'),
   jobsView: document.querySelector('#jobsView'),
-  viewTabs: document.querySelectorAll('.workspace-tab'),
+  validationModal: document.querySelector('#validationModal'),
+  closeValidationModalButton: document.querySelector('#closeValidationModalButton'),
   runValidationButton: document.querySelector('#runValidationButton'),
   validationSummary: document.querySelector('#validationSummary'),
   validationRows: document.querySelector('#validationRows'),
@@ -154,6 +163,7 @@ function categoriesFor(report) {
 }
 
 function renderCategoryTabs() {
+  if (!els.categoryTabs) return;
   const categories = categoriesFor(state.currentReport || {});
   els.categoryTabs.innerHTML = categories.map(([key, label]) => `
     <button class="category-tab ${key === state.currentCategory ? 'active' : ''}" type="button" data-category="${escapeHtml(key)}">
@@ -202,7 +212,6 @@ function setCommentForm(comment) {
   els.autoCommentInput.value = comment?.auto_comment || '';
   els.referenceInput.value = comment?.reference_note || '';
   els.finalCommentInput.value = comment?.final_comment || '';
-  els.statusInput.value = comment?.status || 'draft';
   els.saveMessage.textContent = '';
   els.saveMessage.className = 'save-message';
   if (els.aiDraftTrace) {
@@ -225,6 +234,110 @@ function renderAiProviderStatus() {
   els.aiProviderStatus.textContent = `${fallbackText} 초안은 저장 전 운영자 검토가 필요합니다.`;
 }
 
+function validationDiffs() {
+  const checks = state.validationResult?.cross_checks || [];
+  return checks.filter((item) => !item.passed && !item.approved);
+}
+
+function renderValidationChip() {
+  const chip = els.chipValidation;
+  if (!chip) return;
+
+  if (state.validationLoading) {
+    chip.textContent = '검증 중…';
+    chip.className = 'status-chip pending';
+    return;
+  }
+
+  const validation = state.validationResult;
+  if (!validation) {
+    chip.textContent = '검증 대기';
+    chip.className = 'status-chip';
+    return;
+  }
+
+  const errors = validation.errors?.length || 0;
+  const diffs = validationDiffs().length;
+  if (errors > 0) {
+    chip.textContent = `검증 오류 ${errors}`;
+    chip.className = 'status-chip error';
+  } else if (diffs > 0) {
+    chip.textContent = `검증 차이 ${diffs}`;
+    chip.className = 'status-chip warn';
+  } else {
+    chip.textContent = '검증 통과';
+    chip.className = 'status-chip ok';
+  }
+}
+
+function renderValidationBanner() {
+  if (!els.validationBanner) return;
+  const errors = state.validationResult?.errors?.length || 0;
+  const diffs = validationDiffs();
+  const show = state.currentView !== 'jobs' && (diffs.length > 0 || errors > 0);
+  els.validationBanner.hidden = !show;
+  if (!show) return;
+
+  els.validationBannerCount.textContent = String(diffs.length || errors);
+  const labels = diffs.slice(0, 4).map((item) => item.name || item.metric_key).filter(Boolean);
+  els.validationBannerMetrics.textContent = labels.length ? labels.join(' · ') : '';
+}
+
+function renderStatusBar() {
+  const report = state.currentReport;
+  if (!report) return;
+
+  const observations = report.observations || [];
+  const comment = report.comment || {};
+  const status = comment.status || report.status || 'draft';
+
+  if (els.chipData) {
+    els.chipData.textContent = `데이터 ${observations.length}개`;
+    els.chipData.className = `status-chip ${observations.length ? 'ok' : 'warn'}`;
+  }
+  if (els.chipComment) {
+    els.chipComment.textContent = status;
+    els.chipComment.className = `status-chip status-${status}`;
+  }
+
+  renderValidationChip();
+  renderValidationBanner();
+}
+
+function renderCommentHistory() {
+  if (!els.commentHistory) return;
+  const versions = state.currentReport?.comment_versions || [];
+  const approvals = state.currentReport?.approval_events || [];
+
+  if (!versions.length && !approvals.length) {
+    els.commentHistory.className = 'comment-history empty-state';
+    els.commentHistory.textContent = '아직 이력 테이블이 없거나 저장된 이력이 없습니다.';
+    return;
+  }
+
+  const versionRows = versions.slice(0, 5).map((item) => `
+    <article class="history-item">
+      <strong>${escapeHtml(item.event_type || 'comment')}</strong>
+      <span>${escapeHtml(formatDateTime(item.created_at))} · ${escapeHtml(item.status || '')}</span>
+      <p>${escapeHtml((item.final_comment || item.auto_comment || item.reference_note || '').slice(0, 110))}</p>
+    </article>
+  `).join('');
+
+  const approvalRows = approvals.slice(0, 5).map((item) => `
+    <article class="history-item">
+      <strong>${escapeHtml(item.event_type || 'approval')}</strong>
+      <span>${escapeHtml(formatDateTime(item.created_at))} · ${escapeHtml(item.target_type || '')}${item.target_key ? `/${escapeHtml(item.target_key)}` : ''}</span>
+      <p>${escapeHtml(item.reason || item.status_to || '')}</p>
+    </article>
+  `).join('');
+
+  els.commentHistory.className = 'comment-history';
+  els.commentHistory.innerHTML = `
+    ${versionRows ? `<h5>Comment versions</h5>${versionRows}` : ''}
+    ${approvalRows ? `<h5>Approval events</h5>${approvalRows}` : ''}
+  `;
+}
+
 function renderResearch() {
   if (!els.researchSummary || !els.sourceRows) return;
   const research = state.research;
@@ -236,6 +349,9 @@ function renderResearch() {
   }
 
   const summary = research.summary || { count: 0, by_source_type: {}, by_relevance: {} };
+  if (els.researchCount) {
+    els.researchCount.textContent = summary.count ? `(${summary.count})` : '';
+  }
   const sourceTypes = Object.entries(summary.by_source_type || {})
     .map(([key, count]) => `${key} ${count}`)
     .join(' / ');
@@ -286,65 +402,55 @@ function renderReport() {
   const report = state.currentReport;
   if (!report) return;
 
-  els.reportTitle.textContent = report.title || `Daily Report ${report.report_date}`;
+  els.reportTitle.textContent = 'Comment';
   els.summaryGenerated.textContent = formatDateTime(report.generated_at);
-  els.summaryStatus.textContent = report.comment?.status || 'draft';
-  const previewUrl = `/${report.preview_html}`;
-  els.previewFrame.src = previewUrl;
-  els.previewOpenLink.href = previewUrl;
+  if (els.previewOpenLink) els.previewOpenLink.href = previewUrlForCurrentDate();
 
   setCommentForm(report.comment);
+  renderCommentHistory();
   renderReportPicker();
   renderCategoryTabs();
   renderMetrics();
   clearValidation();
   renderResearch();
   renderAiProviderStatus();
+  renderStatusBar();
+}
+
+function previewUrlForCurrentDate() {
+  return state.currentDate ? `/report-v2?date=${encodeURIComponent(state.currentDate)}` : '/report-v2';
 }
 
 function setView(view) {
-  state.currentView = view;
-  const isData = view === 'data';
-  const isPreview = view === 'preview';
-  const isComment = view === 'comment';
-  const isValidation = view === 'validation';
   const isJobs = view === 'jobs';
-  els.dataView.hidden = !isData;
-  els.previewView.hidden = !isPreview;
-  els.commentView.hidden = !isComment;
-  els.validationView.hidden = !isValidation;
+  state.currentView = isJobs ? 'jobs' : 'report';
+
+  els.reportView.hidden = isJobs;
   els.jobsView.hidden = !isJobs;
-  els.dataView.classList.toggle('active', isData);
-  els.previewView.classList.toggle('active', isPreview);
-  els.commentView.classList.toggle('active', isComment);
-  els.validationView.classList.toggle('active', isValidation);
   els.jobsView.classList.toggle('active', isJobs);
-  els.viewTabs.forEach((button) => {
-    button.classList.toggle('active', button.dataset.view === view);
-  });
+  els.statusbar.hidden = isJobs;
   els.dailyReportMenuButton.classList.toggle('active', !isJobs);
   els.jobRunsMenuButton.classList.toggle('active', isJobs);
   document.body.classList.toggle('jobs-mode', isJobs);
-  els.summaryStrip.hidden = isJobs;
-  els.workspaceTabs.hidden = isJobs;
+  renderValidationBanner();
 
   if (isJobs) {
     els.reportTitle.textContent = '자동화 로그';
-  } else if (state.currentReport) {
-    els.reportTitle.textContent = state.currentReport.title || `Daily Report ${state.currentReport.report_date}`;
-  }
-
-  if (isJobs) {
     loadJobRuns();
+  } else {
+    els.reportTitle.textContent = 'Comment';
   }
 }
 
 function clearValidation() {
   state.validationResult = null;
+  state.validationLoading = false;
   els.validationSummary.className = 'validation-summary empty-state';
-  els.validationSummary.textContent = '검증 실행 버튼을 누르면 현재 선택한 날짜의 Supabase 반영 여부와 Yahoo Finance 대조 결과가 표시됩니다.';
+  els.validationSummary.textContent = '날짜를 열면 검증이 자동 실행됩니다. Supabase 반영 여부와 Yahoo Finance 대조 결과가 여기에 표시됩니다.';
   els.validationRows.innerHTML = '';
   els.validationMessages.innerHTML = '';
+  renderValidationChip();
+  renderValidationBanner();
 }
 
 function renderValidationMessages(result) {
@@ -724,6 +830,7 @@ async function loadReport(date) {
     state.currentReport = await fetchJson(`/api/reports/${date}`);
     renderReport();
     await Promise.allSettled([loadResearch(date), loadAiProviderStatus()]);
+    runValidation({ silent: true }).catch(() => {});
   } catch (error) {
     els.reportTitle.textContent = `${date} (불러오기 실패)`;
     els.metricRows.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(date)} 리포트 로드 실패: ${escapeHtml(error.message)}</td></tr>`;
@@ -885,21 +992,21 @@ function handleSourceAction(event) {
   }
 }
 
-function getCommentPayload() {
+function getCommentPayload(status) {
   return {
     auto_comment: els.autoCommentInput.value.trim(),
     reference_note: els.referenceInput.value.trim(),
     final_comment: els.finalCommentInput.value.trim(),
     tags: [],
     approved_by: '',
-    status: els.statusInput.value,
+    status,
   };
 }
 
 function validateCommentPayload(payload) {
   const hasComment = Boolean(payload.final_comment || payload.auto_comment);
-  if ((payload.status === 'reviewed' || payload.status === 'published') && !hasComment) {
-    return 'reviewed/published 상태로 저장하려면 최종 코멘트 또는 초안 코멘트가 필요합니다.';
+  if (payload.status === 'published' && !hasComment) {
+    return '발행하려면 최종 코멘트 또는 초안 코멘트가 필요합니다.';
   }
   return '';
 }
@@ -1005,15 +1112,17 @@ function copyDraftToFinal() {
   els.finalCommentInput.focus();
 }
 
-async function uploadToSupabase() {
+async function saveComment(status) {
   if (!state.currentDate) return;
+  const isPublish = status === 'published';
 
   els.uploadButton.disabled = true;
-  els.saveMessage.textContent = 'Supabase에 저장 중입니다...';
+  if (els.saveDraftButton) els.saveDraftButton.disabled = true;
+  els.saveMessage.textContent = isPublish ? '저장·발행 중입니다...' : '임시저장 중입니다...';
   els.saveMessage.className = 'save-message';
 
   try {
-    const payload = getCommentPayload();
+    const payload = getCommentPayload(status);
     const validationError = validateCommentPayload(payload);
     if (validationError) {
       throw new Error(validationError);
@@ -1026,40 +1135,80 @@ async function uploadToSupabase() {
     });
 
     state.currentReport.comment = result.comment;
-    state.currentReport.preview_html = result.review_html || state.currentReport.preview_html;
-    els.summaryStatus.textContent = result.comment.status;
-    const previewUrl = `/${state.currentReport.preview_html}`;
-    els.previewFrame.src = previewUrl;
-    els.previewOpenLink.href = previewUrl;
-    els.saveMessage.textContent = `저장·발행 완료: ${result.supabase.report_date}`;
+    try {
+      state.currentReport = await fetchJson(`/api/reports/${state.currentDate}`);
+    } catch (error) {
+      // Keep the optimistic update when the detail refresh is unavailable.
+    }
+    if (els.previewOpenLink) els.previewOpenLink.href = previewUrlForCurrentDate();
+    if (els.previewFrame && els.previewModal && !els.previewModal.hidden) {
+      els.previewFrame.src = previewUrlForCurrentDate();
+    }
+    renderCommentHistory();
+    renderStatusBar();
+    els.saveMessage.textContent = `${isPublish ? '저장·발행' : '임시저장'} 완료: ${result.supabase.report_date}`;
     els.saveMessage.className = 'save-message ok';
   } catch (error) {
-    els.saveMessage.textContent = `저장 실패: ${error.message}`;
+    els.saveMessage.textContent = `${isPublish ? '발행' : '임시저장'} 실패: ${error.message}`;
     els.saveMessage.className = 'save-message error';
   } finally {
     els.uploadButton.disabled = false;
+    if (els.saveDraftButton) els.saveDraftButton.disabled = false;
   }
 }
 
-async function runValidation() {
+async function runValidation({ silent = false } = {}) {
   if (!state.currentDate) return;
 
-  els.runValidationButton.disabled = true;
-  els.validationSummary.className = 'validation-summary';
-  els.validationSummary.textContent = '검증 실행 중입니다...';
-  els.validationRows.innerHTML = '';
-  els.validationMessages.innerHTML = '';
+  state.validationLoading = true;
+  renderValidationChip();
+  if (els.runValidationButton) els.runValidationButton.disabled = true;
+  if (!silent) {
+    els.validationSummary.className = 'validation-summary';
+    els.validationSummary.textContent = '검증 실행 중입니다...';
+    els.validationRows.innerHTML = '';
+    els.validationMessages.innerHTML = '';
+  }
 
   try {
     const result = await fetchJson(`/api/validation/${state.currentDate}`);
     state.validationResult = result;
     renderValidation(result);
   } catch (error) {
-    els.validationSummary.className = 'validation-summary error';
-    els.validationSummary.textContent = `검증 실패: ${error.message}`;
+    if (!silent) {
+      state.validationResult = null;
+      els.validationSummary.className = 'validation-summary error';
+      els.validationSummary.textContent = `검증 실패: ${error.message}`;
+    }
   } finally {
-    els.runValidationButton.disabled = false;
+    state.validationLoading = false;
+    if (els.runValidationButton) els.runValidationButton.disabled = false;
+    renderValidationChip();
+    renderValidationBanner();
   }
+}
+
+function openPreviewModal() {
+  if (!els.previewModal || !state.currentDate) return;
+  if (els.previewFrame) els.previewFrame.src = previewUrlForCurrentDate();
+  if (els.previewOpenLink) els.previewOpenLink.href = previewUrlForCurrentDate();
+  els.previewModal.hidden = false;
+}
+
+function closePreviewModal() {
+  if (els.previewModal) els.previewModal.hidden = true;
+}
+
+function openValidationModal() {
+  if (!els.validationModal) return;
+  els.validationModal.hidden = false;
+  if (!state.validationResult && !state.validationLoading) {
+    runValidation().catch(() => {});
+  }
+}
+
+function closeValidationModal() {
+  if (els.validationModal) els.validationModal.hidden = true;
 }
 
 els.refreshButton.addEventListener('click', () => {
@@ -1076,10 +1225,21 @@ els.logModal.addEventListener('click', (event) => {
     closeLogModal();
   }
 });
+els.openPreviewButton?.addEventListener('click', openPreviewModal);
+els.closePreviewModalButton?.addEventListener('click', closePreviewModal);
+els.previewModal?.addEventListener('click', (event) => {
+  if (event.target === els.previewModal) closePreviewModal();
+});
+els.validationBannerDetail?.addEventListener('click', openValidationModal);
+els.closeValidationModalButton?.addEventListener('click', closeValidationModal);
+els.validationModal?.addEventListener('click', (event) => {
+  if (event.target === els.validationModal) closeValidationModal();
+});
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !els.logModal.hidden) {
-    closeLogModal();
-  }
+  if (event.key !== 'Escape') return;
+  if (!els.logModal.hidden) closeLogModal();
+  else if (els.previewModal && !els.previewModal.hidden) closePreviewModal();
+  else if (els.validationModal && !els.validationModal.hidden) closeValidationModal();
 });
 els.reportSelect.addEventListener('change', () => {
   if (els.reportSelect.value) {
@@ -1093,14 +1253,12 @@ els.reloadResearchButton?.addEventListener('click', () => loadResearch());
 els.addResearchButton?.addEventListener('click', addResearchItem);
 els.saveResearchButton?.addEventListener('click', saveResearch);
 els.sourceRows?.addEventListener('click', handleSourceAction);
-els.uploadButton.addEventListener('click', uploadToSupabase);
-els.runValidationButton.addEventListener('click', runValidation);
+els.uploadButton.addEventListener('click', () => saveComment('published'));
+els.saveDraftButton?.addEventListener('click', () => saveComment('draft'));
+els.runValidationButton?.addEventListener('click', () => runValidation());
 els.reloadJobsButton.addEventListener('click', loadJobRuns);
-els.dailyReportMenuButton.addEventListener('click', () => setView('data'));
+els.dailyReportMenuButton.addEventListener('click', () => setView('report'));
 els.jobRunsMenuButton.addEventListener('click', () => setView('jobs'));
-els.viewTabs.forEach((button) => {
-  button.addEventListener('click', () => setView(button.dataset.view));
-});
 
 loadReports().catch((error) => {
   els.reportTitle.textContent = '관리자 화면 오류';
