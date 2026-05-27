@@ -12,7 +12,7 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-from import_historical_market_data import METRICS, build_report, collect_rows, read_env
+from import_historical_market_data import METRICS, build_report, collect_rows, read_env, valid_report_dates
 
 
 EXCLUDED_SHEETS = {
@@ -51,18 +51,10 @@ def resolve_workbook(project_root: Path, workbook: str | None) -> Path:
 
 
 def latest_report_date(rows_by_sheet: dict[str, dict[str, dict[str, Any]]]) -> str:
-    core_keys = {"kospi", "usdkrw", "us_treasury_10y", "sp500", "wti"}
-    metric_by_key = {metric.key: metric for metric in METRICS}
-    counts: dict[str, int] = {}
-    for key in core_keys:
-        metric = metric_by_key[key]
-        for row_date, row in rows_by_sheet.get(metric.sheet, {}).items():
-            if row.get(key, {}).get("value") not in (None, 0):
-                counts[row_date] = counts.get(row_date, 0) + 1
-    candidates = [row_date for row_date, count in counts.items() if count >= 4]
+    candidates = valid_report_dates(rows_by_sheet, "9999-12-31", None)
     if not candidates:
-        raise RuntimeError("No valid report date found from core metrics.")
-    return sorted(candidates)[-1]
+        raise RuntimeError("No valid report date found from complete report metrics.")
+    return candidates[-1]
 
 
 def workbook_sheet_summary(workbook_path: Path) -> list[dict[str, Any]]:

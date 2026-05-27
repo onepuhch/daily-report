@@ -333,14 +333,18 @@ function Find-DefaultReportDate {
         [object[]]$MetricDefs
     )
 
-    $core = $MetricDefs | Where-Object { $_.Key -in @("kospi", "usdkrw", "us_treasury_10y", "sp500", "wti") }
+    $eligibilityRules = @{
+        domestic_rates       = 2
+        domestic_equities_fx = 2
+    }
+    $metricsToRead = @($MetricDefs | Where-Object { $eligibilityRules.ContainsKey($_.Category) })
     $rowsBySheet = @{}
-    foreach ($sheetName in ($core | Select-Object -ExpandProperty Sheet -Unique)) {
-        $rowsBySheet[$sheetName] = Get-SheetMetricRows -Snapshot $Snapshot -SheetName $sheetName -Metrics ($core | Where-Object Sheet -eq $sheetName)
+    foreach ($sheetName in ($metricsToRead | Select-Object -ExpandProperty Sheet -Unique)) {
+        $rowsBySheet[$sheetName] = Get-SheetMetricRows -Snapshot $Snapshot -SheetName $sheetName -Metrics ($metricsToRead | Where-Object Sheet -eq $sheetName)
     }
 
     $dates = @{}
-    foreach ($metric in $core) {
+    foreach ($metric in $metricsToRead) {
         foreach ($row in $rowsBySheet[$metric.Sheet]) {
             $value = $row.Metrics[$metric.Key].Value
             if ($null -ne $value -and $value -ne 0) {
@@ -353,7 +357,29 @@ function Find-DefaultReportDate {
     }
 
     return ($dates.GetEnumerator() |
-        Where-Object { $_.Value -ge 4 } |
+        Where-Object {
+            $date = $_.Name
+            foreach ($category in $eligibilityRules.Keys) {
+                $availableCount = 0
+                foreach ($metric in ($metricsToRead | Where-Object { $_.Category -eq $category })) {
+                    $row = @($rowsBySheet[$metric.Sheet] | Where-Object { $_.Date -eq $date } | Select-Object -First 1)
+                    if ($row.Count -eq 0) {
+                        continue
+                    }
+
+                    $value = $row[0].Metrics[$metric.Key].Value
+                    if ($null -ne $value -and $value -ne 0) {
+                        $availableCount += 1
+                    }
+                }
+
+                if ($availableCount -lt $eligibilityRules[$category]) {
+                    return $false
+                }
+            }
+
+            return $true
+        } |
         Sort-Object Name -Descending |
         Select-Object -First 1).Name
 }

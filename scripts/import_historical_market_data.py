@@ -91,6 +91,15 @@ CATEGORY_LABELS = {
     "investor_flows": "투자자 동향",
 }
 
+# A report date is a Korean Market Daily date, not a date where every
+# country-specific market happened to trade. Overseas holidays should only
+# remove their own metrics from that day's observations. The date itself is
+# eligible when the Korean anchor groups have enough cached values.
+REPORT_ELIGIBILITY_RULES = {
+    "domestic_rates": 2,
+    "domestic_equities_fx": 2,
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import historical Market Daily metrics to Supabase.")
@@ -276,17 +285,28 @@ def convert_change(current: float, base: float | None, metric: MetricDef) -> flo
 
 
 def valid_report_dates(rows_by_sheet: dict[str, dict[str, dict[str, Any]]], until: str, from_date: str | None) -> list[str]:
-    core = ["kospi", "usdkrw", "us_treasury_10y", "sp500", "wti"]
-    metric_by_key = {metric.key: metric for metric in METRICS}
-    counts: dict[str, int] = {}
-    for key in core:
-        metric = metric_by_key[key]
-        for row_date, row in rows_by_sheet[metric.sheet].items():
-            if row[key]["value"] not in (None, 0):
-                counts[row_date] = counts.get(row_date, 0) + 1
+    metrics_by_category: dict[str, list[MetricDef]] = {}
+    for metric in METRICS:
+        metrics_by_category.setdefault(metric.category, []).append(metric)
+
+    candidate_dates: set[str] = set()
+    for category in REPORT_ELIGIBILITY_RULES:
+        for metric in metrics_by_category[category]:
+            candidate_dates.update(rows_by_sheet.get(metric.sheet, {}).keys())
+
     dates = []
-    for row_date, count in counts.items():
-        if count < 4:
+    for row_date in candidate_dates:
+        is_eligible = True
+        for category, required_count in REPORT_ELIGIBILITY_RULES.items():
+            available_count = 0
+            for metric in metrics_by_category[category]:
+                row = rows_by_sheet.get(metric.sheet, {}).get(row_date)
+                if row and row.get(metric.key, {}).get("value") not in (None, 0):
+                    available_count += 1
+            if available_count < required_count:
+                is_eligible = False
+                break
+        if not is_eligible:
             continue
         if row_date > until:
             continue
