@@ -18,6 +18,7 @@ const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
 const reportV2Dir = path.join(projectRoot, 'src', 'daily_report', 'report_v2');
 const logsDir = path.join(projectRoot, 'data', 'logs');
 const researchDir = path.join(projectRoot, 'data', 'research');
+const cleanedHistoricalCommentDir = path.join(projectRoot, 'data', 'historical_ocr', 'cleaned_comments', 'review');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
 const defaultHost = process.env.DAILY_REPORT_ADMIN_HOST || process.env.HOST || '127.0.0.1';
 const execFileAsync = promisify(execFile);
@@ -1180,17 +1181,25 @@ async function mapSupabaseCommentWithFallback(row, status = 'draft') {
   const comment = mapSupabaseComment(row.report_comments, status);
   if (comment.final_comment || comment.auto_comment) return comment;
 
-  const historicalDocs = await getHistoricalCommentDocuments(row.report_date);
-  const historicalComment = historicalCommentTextFromDocuments(historicalDocs);
-  if (!historicalComment) return comment;
-
-  return {
-    ...comment,
-    auto_comment: historicalComment,
-    reference_note: comment.reference_note || 'Loaded from historical OCR source_documents.',
-    tags: [...new Set([...(comment.tags || []), 'historical', 'ocr'])],
-    historical_comment_source: 'source_documents',
-  };
+  try {
+    const cleanedComment = (await readFile(
+      path.join(cleanedHistoricalCommentDir, `${row.report_date}.comment.review.txt`),
+      'utf8',
+    )).trim();
+    if (!cleanedComment) return comment;
+    return {
+      ...comment,
+      auto_comment: cleanedComment,
+      reference_note: comment.reference_note || 'Loaded from cleaned historical PNG comment box.',
+      tags: [...new Set([...(comment.tags || []), 'historical', 'png-cleaned'])],
+      historical_comment_source: 'cleaned_png_comment',
+    };
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn(`Cleaned historical comment unavailable for ${row.report_date}: ${error.message}`);
+    }
+    return comment;
+  }
 }
 
 async function bestEffortSupabase(method, endpoint, body, label) {

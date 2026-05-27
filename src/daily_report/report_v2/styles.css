@@ -375,15 +375,26 @@ svg { display: block; }
   font-weight: 900;
   letter-spacing: 0;
 }
-.brief-main-card p {
+.brief-text {
   position: relative;
   z-index: 1;
   max-width: calc(100% - 104px);
+}
+.brief-comment-block + .brief-comment-block { margin-top: 16px; }
+.brief-comment-block h3 {
+  margin: 0 0 5px;
+  color: #17384d;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+.brief-text p {
   margin: 0;
   color: #59656f;
   font-size: 13px;
   line-height: 1.75;
 }
+.brief-text p + p { margin-top: 8px; }
 .brief-actions {
   position: relative;
   z-index: 1;
@@ -723,6 +734,63 @@ svg { display: block; }
 .flows-block .flow-item:nth-child(2n) { border-right: 0; }
 .flows-block .flow-name { font-size: 11px; }
 .flows-block .flow-value { font-size: 13px; }
+.investor-card { grid-column: 1 / -1; }
+.investor-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding: 18px 22px 22px;
+}
+.investor-matrix-section {
+  min-width: 0;
+  border: 1px solid #f0f0f0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #fff;
+}
+.investor-matrix-section h3 {
+  margin: 0;
+  padding: 12px 14px;
+  color: #9a541f;
+  background: #fff7ef;
+  border-bottom: 1px solid #f4e4d8;
+  font-size: 13px;
+  font-weight: 900;
+}
+.investor-table-wrap { overflow-x: auto; }
+.investor-table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+}
+.investor-table th,
+.investor-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3f3f3;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.investor-table th:first-child,
+.investor-table td:first-child {
+  color: var(--ink);
+  font-weight: 900;
+  text-align: left;
+}
+.investor-table th {
+  color: var(--muted);
+  background: #fcfcfc;
+  font-weight: 900;
+}
+.investor-table tr:last-child td { border-bottom: 0; }
+.flow-matrix-value {
+  color: var(--ink);
+  font-weight: 900;
+}
+.flow-matrix-value.buy { color: var(--buy); }
+.flow-matrix-value.sell { color: var(--sell); }
+.flow-matrix-empty { color: var(--muted-2); }
 .comment-section {
   border: 1px solid #ffe6a5;
   border-radius: var(--radius-lg);
@@ -996,9 +1064,11 @@ svg { display: block; }
   .brief-main-card { padding: 20px; }
   .brief-main-card::after { display: none; }
   .brief-main-card h2 { font-size: 20px; }
-  .brief-main-card p {
+  .brief-text {
     width: min(100%, 280px);
     max-width: calc(100vw - 72px);
+  }
+  .brief-text p {
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-all;
@@ -1043,6 +1113,8 @@ svg { display: block; }
   .metric-picker-btn { min-width: 0; }
   .flows-block .flows-grid { grid-template-columns: 1fr; }
   .flows-block .flow-item { border-right: 0; }
+  .investor-matrix-grid { grid-template-columns: 1fr; padding: 16px; }
+  .investor-table { min-width: 440px; }
   .card-header { min-height: auto; }
   .metrics-table {
     min-width: 0;

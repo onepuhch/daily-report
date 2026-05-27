@@ -52,10 +52,19 @@ const CATEGORY_META = [
   {
     key: 'equities',
     label: '주식·투자자',
-    eyebrow: 'Equities & Flows',
-    categories: ['domestic_equities_fx', 'global_equities', 'crypto', 'investor_flows'],
+    eyebrow: 'Equities',
+    categories: ['domestic_equities_fx', 'global_equities', 'crypto'],
     sparkMetric: null,
     tone: 'green',
+  },
+  {
+    key: 'investor_flows',
+    label: '투자자별 매매 동향',
+    eyebrow: 'Investor Flows',
+    categories: ['investor_flows'],
+    optional: true,
+    sparkMetric: null,
+    tone: 'orange',
   },
   {
     key: 'fx',
@@ -412,8 +421,7 @@ function renderReport(report) {
 function renderHero(report) {
   dom.heroDate.textContent = dayLabel(report.report_date, true);
   dom.heroAuthor.textContent = report.author || '자금운용본부';
-  const comment = report.comment;
-  dom.heroComment.textContent = comment?.final_comment || comment?.auto_comment || '';
+  dom.heroComment.textContent = '';
 }
 
 function formatDateTime(value) {
@@ -583,6 +591,35 @@ function buildGeneratedBrief(report) {
   return points.join(' · ');
 }
 
+function briefTextHtml(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return '<p>-</p>';
+
+  const blocks = [];
+  let current = null;
+  for (const line of lines) {
+    const match = line.match(/^-?\s*\[(국내|해외)\]\s*(.*)$/);
+    if (match) {
+      if (current) blocks.push(current);
+      current = { title: match[1], body: [] };
+      if (match[2]) current.body.push(match[2]);
+      continue;
+    }
+    if (current) current.body.push(line);
+    else blocks.push({ title: '', body: [line] });
+  }
+  if (current) blocks.push(current);
+
+  return blocks.map((block) => {
+    const title = block.title ? `<h3>${esc(`[${block.title}]`)}</h3>` : '';
+    const body = block.body.length ? `<p>${esc(block.body.join(' '))}</p>` : '';
+    return `<section class="brief-comment-block">${title}${body}</section>`;
+  }).join('');
+}
+
 function renderOpsStrip(report, validation) {
   if (!dom.opsStrip) return;
   const reportMeta = state.reports.find((item) => item.date === report.report_date) || {};
@@ -629,8 +666,7 @@ function renderBriefBoard(report, validation) {
   dom.briefBoard.innerHTML = `
     <article class="brief-main-card">
       <div class="brief-kicker">Daily Brief</div>
-      <h2>전일 국내외 채권시장 영향 요약</h2>
-      <p>${esc(briefText)}</p>
+      <div class="brief-text">${briefTextHtml(briefText)}</div>
       <div class="brief-actions">
         <button class="btn-primary brief-chat" type="button" data-open-chat>AI로 추가 분석</button>
       </div>
@@ -916,7 +952,11 @@ function renderGrid(report) {
   for (const category of CATEGORY_META) {
     const items = categoryItems(observations, category);
     if (!items.length && category.optional) continue;
-    dom.reportGrid.appendChild(renderMetricsCard(category, items));
+    dom.reportGrid.appendChild(
+      category.key === 'investor_flows'
+        ? renderInvestorFlowsCard(category, items)
+        : renderMetricsCard(category, items),
+    );
   }
 
   requestAnimationFrame(() => initSparklines(report));
@@ -971,6 +1011,75 @@ function renderMetricsCard(category, items) {
       </table>
     </div>
     ${flowItems.length ? renderFlowsBlock(flowItems) : ''}
+  `;
+  return card;
+}
+
+function investorFlowValue(items, key) {
+  return items.find((item) => item.metric_key === key) || null;
+}
+
+function renderInvestorFlowsCard(category, items) {
+  const card = document.createElement('section');
+  card.className = `category-card investor-card tone-${category.tone}`;
+  card.dataset.category = category.key;
+
+  const sections = [
+    {
+      title: '주식',
+      rows: [
+        ['KOSPI', 'stock_kospi_foreign', 'stock_kospi_inst', 'stock_kospi_individual'],
+        ['KOSDAQ', 'stock_kosdaq_foreign', 'stock_kosdaq_inst', 'stock_kosdaq_individual'],
+        ['KOSPI200 선물', 'fut_kospi200_foreign', 'fut_kospi200_inst', 'fut_kospi200_individual'],
+      ],
+    },
+    {
+      title: '채권',
+      rows: [
+        ['국채선물 3년', 'fut_kr3y_foreign', 'fut_kr3y_inst', 'fut_kr3y_individual'],
+        ['국채선물 10년', 'fut_kr10y_foreign', 'fut_kr10y_inst', 'fut_kr10y_individual'],
+      ],
+    },
+  ];
+
+  const renderCell = (item) => {
+    if (!item) return '<td class="flow-matrix-empty">-</td>';
+    const value = Number(item.value);
+    const direction = value >= 0 ? 'buy' : 'sell';
+    return `<td class="flow-matrix-value ${direction}">${esc(changeText(value, item.unit || ''))}</td>`;
+  };
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-title-group">
+        <div class="card-eyebrow">${esc(category.eyebrow)}</div>
+        <h2 class="card-title">${esc(category.label)}</h2>
+      </div>
+    </div>
+    <div class="investor-matrix-grid">
+      ${sections.map((section) => `
+        <section class="investor-matrix-section">
+          <h3>${esc(section.title)}</h3>
+          <div class="investor-table-wrap">
+            <table class="investor-table">
+              <thead>
+                <tr><th>구분</th><th>외국인</th><th>기관</th><th>개인</th></tr>
+              </thead>
+              <tbody>
+                ${section.rows.map(([label, foreignKey, instKey, individualKey]) => `
+                  <tr>
+                    <td>${esc(label)}</td>
+                    ${renderCell(investorFlowValue(items, foreignKey))}
+                    ${renderCell(investorFlowValue(items, instKey))}
+                    ${renderCell(investorFlowValue(items, individualKey))}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      `).join('')}
+    </div>
   `;
   return card;
 }
