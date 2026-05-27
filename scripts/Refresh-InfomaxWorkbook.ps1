@@ -62,6 +62,21 @@ function Get-RequiredInfomaxProcesses {
     return @("infomaxmain", "imxlcommapp")
 }
 
+function Get-RunningInfomaxProcesses {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_RUNNING_PROCESSES"]
+    if ($configured) {
+        return @(
+            $configured -split "," |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { $_ }
+        )
+    }
+
+    return @("infomaxmain")
+}
+
 function Get-InfomaxLauncherPath {
     param($EnvValues)
 
@@ -87,11 +102,85 @@ function Get-InfomaxStartupWaitSeconds {
             return [Math]::Max(10, [int]$configured)
         }
         catch {
-            Write-Host "Invalid INFOMAX_STARTUP_WAIT_SECONDS value '$configured'. Using 120 seconds."
+            Write-Host "Invalid INFOMAX_STARTUP_WAIT_SECONDS value '$configured'. Using 240 seconds."
+        }
+    }
+
+    return 240
+}
+
+function Get-InfomaxPostLoginWaitSeconds {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_POST_LOGIN_WAIT_SECONDS"]
+    if ($configured) {
+        try {
+            return [Math]::Max(0, [int]$configured)
+        }
+        catch {
+            Write-Host "Invalid INFOMAX_POST_LOGIN_WAIT_SECONDS value '$configured'. Using 15 seconds."
+        }
+    }
+
+    return 15
+}
+
+function Get-InfomaxReadySettleSeconds {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_READY_SETTLE_SECONDS"]
+    if ($configured) {
+        try {
+            return [Math]::Max(0, [int]$configured)
+        }
+        catch {
+            Write-Host "Invalid INFOMAX_READY_SETTLE_SECONDS value '$configured'. Using 120 seconds."
         }
     }
 
     return 120
+}
+
+function Get-InfomaxLoginWindowKeywords {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_LOGIN_WINDOW_KEYWORDS"]
+    if ($configured) {
+        return @(
+            $configured -split "," |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { $_ }
+        )
+    }
+
+    return @("Infomax", "Login", "infomax", "login")
+}
+
+function Get-ExcelOpenMode {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_EXCEL_OPEN_MODE"]
+    if ($configured) {
+        return $configured.Trim().ToLowerInvariant()
+    }
+
+    return "shell"
+}
+
+function Get-ExcelAttachWaitSeconds {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_EXCEL_ATTACH_WAIT_SECONDS"]
+    if ($configured) {
+        try {
+            return [Math]::Max(5, [int]$configured)
+        }
+        catch {
+            Write-Host "Invalid INFOMAX_EXCEL_ATTACH_WAIT_SECONDS value '$configured'. Using 60 seconds."
+        }
+    }
+
+    return 60
 }
 
 function Get-EnvBool {
@@ -131,6 +220,91 @@ function Get-EnvInt {
     }
 }
 
+function Get-ActiveExcelApplication {
+    try {
+        return [Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-WorkbookByPath {
+    param(
+        $Excel,
+        [string]$WorkbookPath
+    )
+
+    foreach ($candidate in @($Excel.Workbooks)) {
+        try {
+            if ($candidate.FullName -eq $WorkbookPath) {
+                return $candidate
+            }
+        }
+        catch {
+        }
+    }
+
+    return $null
+}
+
+function Open-WorkbookWithShell {
+    param(
+        [string]$WorkbookPath,
+        [int]$AttachWaitSeconds,
+        [bool]$Visible
+    )
+
+    Write-Host "Opening workbook through Windows shell so Infomax Excel add-in can attach normally..."
+    Start-Process -FilePath $WorkbookPath | Out-Null
+
+    $deadline = (Get-Date).AddSeconds($AttachWaitSeconds)
+    do {
+        Start-Sleep -Seconds 2
+        $excel = Get-ActiveExcelApplication
+        if ($null -eq $excel) {
+            continue
+        }
+
+        try {
+            $excel.Visible = $Visible
+        }
+        catch {
+        }
+
+        $workbook = Get-WorkbookByPath -Excel $excel -WorkbookPath $WorkbookPath
+        if ($null -ne $workbook) {
+            return @{
+                Excel = $excel
+                Workbook = $workbook
+                OwnsExcel = $false
+            }
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Workbook was opened through Windows shell, but Excel COM attachment did not become available within $AttachWaitSeconds seconds."
+}
+
+function Open-WorkbookWithCom {
+    param(
+        [string]$WorkbookPath,
+        [bool]$Visible
+    )
+
+    Write-Host "Opening workbook through Excel COM automation."
+    $excel = New-Object -ComObject Excel.Application
+    $excel.Visible = $Visible
+    $excel.DisplayAlerts = $false
+    $excel.AskToUpdateLinks = $false
+    $workbook = $excel.Workbooks.Open($WorkbookPath)
+
+    return @{
+        Excel = $excel
+        Workbook = $workbook
+        OwnsExcel = $true
+    }
+}
+
 function Get-MissingInfomaxProcesses {
     param([string[]]$RequiredProcesses)
 
@@ -139,6 +313,19 @@ function Get-MissingInfomaxProcesses {
         $RequiredProcesses |
             Where-Object { $running -notcontains $_.ToLowerInvariant() }
     )
+}
+
+function Test-AnyInfomaxProcessRunning {
+    param([string[]]$RunningProcesses)
+
+    $running = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName.ToLowerInvariant() })
+    foreach ($processName in $RunningProcesses) {
+        if ($running -contains $processName.ToLowerInvariant()) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Wait-InfomaxRunning {
@@ -162,17 +349,176 @@ function Wait-InfomaxRunning {
     throw "Infomax startup did not become ready within $TimeoutSeconds seconds. Missing process(es): $missingText. Check Infomax login/network state, then rerun. Expected process(es): $expected."
 }
 
+function Throw-InfomaxStartupTimeout {
+    param(
+        [string[]]$RequiredProcesses,
+        [int]$TimeoutSeconds
+    )
+
+    $expected = $RequiredProcesses -join ", "
+    $missingText = (@(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses) -join ", ")
+    throw "Infomax startup did not become ready within $TimeoutSeconds seconds. Missing process(es): $missingText. Check Infomax login/network state, then rerun. Expected process(es): $expected."
+}
+
+function Invoke-InfomaxLoginSubmit {
+    param(
+        $LauncherProcess,
+        [int]$LoginSubmitDelaySeconds,
+        [string[]]$WindowKeywords,
+        [bool]$BlindEnter
+    )
+
+    Write-Host "Auto-submit login is enabled. Waiting $LoginSubmitDelaySeconds seconds before sending Enter to the Infomax login window..."
+    if ($LoginSubmitDelaySeconds -gt 0) {
+        Start-Sleep -Seconds $LoginSubmitDelaySeconds
+    }
+
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        for ($attempt = 1; $attempt -le 6; $attempt += 1) {
+            if ($LauncherProcess -and $shell.AppActivate($LauncherProcess.Id)) {
+                Start-Sleep -Milliseconds 500
+                $shell.SendKeys("{ENTER}")
+                Write-Host "Sent Enter to Infomax login window using launcher process id."
+                return $true
+            }
+
+            foreach ($keyword in $WindowKeywords) {
+                if ($shell.AppActivate($keyword)) {
+                    Start-Sleep -Milliseconds 500
+                    $shell.SendKeys("{ENTER}")
+                    Write-Host "Sent Enter to Infomax login window using title keyword: $keyword"
+                    return $true
+                }
+            }
+
+            $windowProcesses = @(
+                Get-Process -ErrorAction SilentlyContinue |
+                    Where-Object {
+                        $title = $_.MainWindowTitle
+                        $matched = $false
+                        if ($title) {
+                            foreach ($keyword in $WindowKeywords) {
+                                if ($title -like "*$keyword*") {
+                                    $matched = $true
+                                    break
+                                }
+                            }
+                        }
+
+                        $matched
+                    }
+            )
+
+            foreach ($process in $windowProcesses) {
+                if ($shell.AppActivate($process.Id)) {
+                    Start-Sleep -Milliseconds 500
+                    $shell.SendKeys("{ENTER}")
+                    Write-Host "Sent Enter to Infomax login window: $($process.MainWindowTitle)"
+                    return $true
+                }
+            }
+
+            Start-Sleep -Seconds 2
+        }
+
+        if ($BlindEnter) {
+            Write-Host "Could not activate Infomax login window. Sending Enter to the currently active window as fallback."
+            Start-Sleep -Milliseconds 500
+            $shell.SendKeys("{ENTER}")
+            return $true
+        }
+
+        $visibleWindows = @(
+            Get-Process -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowTitle } |
+                Select-Object -First 20 ProcessName, MainWindowTitle
+        )
+        if ($visibleWindows.Count -gt 0) {
+            Write-Host "Visible windows while looking for Infomax login:"
+            $visibleWindows | ForEach-Object { Write-Host "  $($_.ProcessName): $($_.MainWindowTitle)" }
+        }
+
+        Write-Host "Could not activate Infomax login window automatically. If login is waiting, click the login button manually."
+        return $false
+    }
+    catch {
+        Write-Host "Auto-submit login failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Wait-InfomaxStartupAfterLaunch {
+    param(
+        [string[]]$RequiredProcesses,
+        [int]$TimeoutSeconds,
+        [bool]$AutoSubmitLogin,
+        [int]$LoginSubmitDelaySeconds,
+        [int]$PostLoginWaitSeconds,
+        [bool]$BlindEnter,
+        [string[]]$LoginWindowKeywords,
+        $LauncherProcess
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $firstSubmit = $true
+    $submitAttempt = 1
+
+    do {
+        $missing = @(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses)
+        if ($missing.Count -eq 0) {
+            return
+        }
+
+        if ($AutoSubmitLogin) {
+            $delay = if ($firstSubmit) { $LoginSubmitDelaySeconds } else { 0 }
+            Write-Host "Infomax login submit attempt $submitAttempt. Missing process(es): $($missing -join ', ')"
+            [void](Invoke-InfomaxLoginSubmit `
+                -LauncherProcess $LauncherProcess `
+                -LoginSubmitDelaySeconds $delay `
+                -WindowKeywords $LoginWindowKeywords `
+                -BlindEnter $BlindEnter)
+            if ($PostLoginWaitSeconds -gt 0) {
+                Write-Host "Waiting $PostLoginWaitSeconds seconds after login submit for Infomax startup..."
+                Start-Sleep -Seconds $PostLoginWaitSeconds
+            }
+            $firstSubmit = $false
+            $submitAttempt += 1
+        }
+
+        $remainingSeconds = [int][Math]::Ceiling(($deadline - (Get-Date)).TotalSeconds)
+        if ($remainingSeconds -le 0) {
+            break
+        }
+
+        Start-Sleep -Seconds ([Math]::Min(10, $remainingSeconds))
+    } while ((Get-Date) -lt $deadline)
+
+    Throw-InfomaxStartupTimeout -RequiredProcesses $RequiredProcesses -TimeoutSeconds $TimeoutSeconds
+}
+
 function Test-InfomaxRunning {
     param(
         [string[]]$RequiredProcesses,
+        [string[]]$RunningProcesses,
         [string]$InfomaxLauncherPath,
         [int]$StartupWaitSeconds,
         [bool]$AutoSubmitLogin,
-        [int]$LoginSubmitDelaySeconds
+        [int]$LoginSubmitDelaySeconds,
+        [int]$PostLoginWaitSeconds,
+        [bool]$BlindEnter,
+        [string[]]$LoginWindowKeywords
     )
 
     $missing = @(Get-MissingInfomaxProcesses -RequiredProcesses $RequiredProcesses)
     if ($missing.Count -eq 0) {
+        Write-Host "Infomax required process check passed."
+        return
+    }
+
+    if (Test-AnyInfomaxProcessRunning -RunningProcesses $RunningProcesses) {
+        Write-Host "Infomax is already running. Skipping launcher/login and opening the workbook directly."
+        Write-Host "Missing optional process(es): $($missing -join ', '). Excel will attempt to initialize the add-in bridge."
         return
     }
 
@@ -185,32 +531,24 @@ function Test-InfomaxRunning {
     Write-Host "Starting Infomax launcher: $InfomaxLauncherPath"
     $launcherProcess = Start-Process -FilePath $InfomaxLauncherPath -WorkingDirectory (Split-Path -Parent $InfomaxLauncherPath) -PassThru
 
-    if ($AutoSubmitLogin) {
-        Write-Host "Auto-submit login is enabled. Waiting $LoginSubmitDelaySeconds seconds before sending Enter to the Infomax login window..."
-        Start-Sleep -Seconds $LoginSubmitDelaySeconds
-        try {
-            $shell = New-Object -ComObject WScript.Shell
-            $activated = $shell.AppActivate($launcherProcess.Id)
-            if ($activated) {
-                Start-Sleep -Milliseconds 500
-                $shell.SendKeys("{ENTER}")
-                Write-Host "Sent Enter to Infomax login window."
-            }
-            else {
-                Write-Host "Could not activate Infomax login window automatically. If login is waiting, click the login button manually."
-            }
-        }
-        catch {
-            Write-Host "Auto-submit login failed: $($_.Exception.Message)"
-        }
-    }
-
     Write-Host "Waiting up to $StartupWaitSeconds seconds for Infomax and Excel add-in bridge to become ready..."
-    Wait-InfomaxRunning -RequiredProcesses $RequiredProcesses -TimeoutSeconds $StartupWaitSeconds
+    Wait-InfomaxStartupAfterLaunch `
+        -RequiredProcesses $RequiredProcesses `
+        -TimeoutSeconds $StartupWaitSeconds `
+        -AutoSubmitLogin $AutoSubmitLogin `
+        -LoginSubmitDelaySeconds $LoginSubmitDelaySeconds `
+        -PostLoginWaitSeconds $PostLoginWaitSeconds `
+        -BlindEnter $BlindEnter `
+        -LoginWindowKeywords $LoginWindowKeywords `
+        -LauncherProcess $launcherProcess
 }
 
 $root = Get-ProjectRoot
-$envValues = Read-DotEnv -Path (Join-Path $root ".env")
+$envValues = Read-DotEnv -Path (Join-Path (Split-Path -Parent $root) ".env")
+$localEnvValues = Read-DotEnv -Path (Join-Path $root ".env")
+foreach ($key in $localEnvValues.Keys) {
+    $envValues[$key] = $localEnvValues[$key]
+}
 
 if (-not $WorkbookPath) {
     $WorkbookPath = $envValues["INFOMAX_EXCEL_PATH"]
@@ -225,6 +563,7 @@ if (-not (Test-Path -LiteralPath $WorkbookPath)) {
 $WorkbookPath = (Resolve-Path -LiteralPath $WorkbookPath).Path
 $excel = $null
 $workbook = $null
+$ownsExcel = $true
 
 Write-Host "Infomax Excel refresh"
 Write-Host "Workbook: $WorkbookPath"
@@ -232,26 +571,56 @@ Write-Host ""
 
 try {
     $requiredInfomaxProcesses = Get-RequiredInfomaxProcesses -EnvValues $envValues
+    $runningInfomaxProcesses = Get-RunningInfomaxProcesses -EnvValues $envValues
     $infomaxLauncherPath = Get-InfomaxLauncherPath -EnvValues $envValues
     $infomaxStartupWaitSeconds = Get-InfomaxStartupWaitSeconds -EnvValues $envValues
+    $infomaxPostLoginWaitSeconds = Get-InfomaxPostLoginWaitSeconds -EnvValues $envValues
+    $infomaxReadySettleSeconds = Get-InfomaxReadySettleSeconds -EnvValues $envValues
+    $infomaxLoginWindowKeywords = Get-InfomaxLoginWindowKeywords -EnvValues $envValues
+    $excelOpenMode = Get-ExcelOpenMode -EnvValues $envValues
+    $excelAttachWaitSeconds = Get-ExcelAttachWaitSeconds -EnvValues $envValues
     $autoSubmitLogin = Get-EnvBool -EnvValues $envValues -Name "INFOMAX_LOGIN_AUTO_SUBMIT" -DefaultValue $true
-    $loginSubmitDelaySeconds = Get-EnvInt -EnvValues $envValues -Name "INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS" -DefaultValue 5 -MinimumValue 0
+    $blindEnterLogin = Get-EnvBool -EnvValues $envValues -Name "INFOMAX_LOGIN_BLIND_ENTER" -DefaultValue $true
+    $loginSubmitDelaySeconds = Get-EnvInt -EnvValues $envValues -Name "INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS" -DefaultValue 3 -MinimumValue 0
     Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
     Test-InfomaxRunning `
         -RequiredProcesses $requiredInfomaxProcesses `
+        -RunningProcesses $runningInfomaxProcesses `
         -InfomaxLauncherPath $infomaxLauncherPath `
         -StartupWaitSeconds $infomaxStartupWaitSeconds `
         -AutoSubmitLogin $autoSubmitLogin `
-        -LoginSubmitDelaySeconds $loginSubmitDelaySeconds
+        -LoginSubmitDelaySeconds $loginSubmitDelaySeconds `
+        -PostLoginWaitSeconds $infomaxPostLoginWaitSeconds `
+        -BlindEnter $blindEnterLogin `
+        -LoginWindowKeywords $infomaxLoginWindowKeywords
     Write-Host "Infomax process check passed."
+    if ($infomaxReadySettleSeconds -gt 0) {
+        Write-Host "Waiting $infomaxReadySettleSeconds seconds for Infomax add-in bridge to settle before opening Excel..."
+        Start-Sleep -Seconds $infomaxReadySettleSeconds
+    }
     Write-Host ""
 
-    $excel = New-Object -ComObject Excel.Application
-    $excel.Visible = [bool]$Visible
-    $excel.DisplayAlerts = $false
-    $excel.AskToUpdateLinks = $false
+    if ($excelOpenMode -eq "com") {
+        $opened = Open-WorkbookWithCom -WorkbookPath $WorkbookPath -Visible ([bool]$Visible)
+    }
+    else {
+        $opened = Open-WorkbookWithShell `
+            -WorkbookPath $WorkbookPath `
+            -AttachWaitSeconds $excelAttachWaitSeconds `
+            -Visible ([bool]$Visible)
+    }
 
-    $workbook = $excel.Workbooks.Open($WorkbookPath)
+    $excel = $opened.Excel
+    $workbook = $opened.Workbook
+    $ownsExcel = [bool]$opened.OwnsExcel
+
+    try {
+        $excel.DisplayAlerts = $false
+        $excel.AskToUpdateLinks = $false
+    }
+    catch {
+        Write-Host "Could not update Excel alert settings. Continuing."
+    }
 
     Write-Host "Refreshing workbook connections and formulas..."
     $workbook.RefreshAll()
@@ -291,11 +660,13 @@ finally {
     }
 
     if ($null -ne $excel) {
-        try {
-            $excel.Quit()
-        }
-        catch {
-            Write-Host "Excel quit failed: $($_.Exception.Message)"
+        if ($ownsExcel) {
+            try {
+                $excel.Quit()
+            }
+            catch {
+                Write-Host "Excel quit failed: $($_.Exception.Message)"
+            }
         }
         Release-ComObject $excel
     }

@@ -1,5 +1,37 @@
 # Daily Report Handoff
 
+## 2026-05-27 Infomax/Excel startup automation fix
+
+Fixed the 07:00 batch failure path where Infomax was sometimes closed before the scheduled run.
+
+- Pulled latest `origin/master` first, then reapplied the Infomax automation changes on top of commit `4ce2ce2`.
+- `scripts/Refresh-InfomaxWorkbook.ps1` now treats `infomaxmain` as the "Infomax is already running" signal. If it is present, the script skips launcher/login and proceeds to Excel.
+- If Infomax is not running, the script starts `C:\Infomax\bin\infomaxlogin.exe`, waits 3 seconds, sends Enter, waits 15 seconds after the login submit, and keeps retrying within the startup timeout.
+- Added blind Enter fallback (`INFOMAX_LOGIN_BLIND_ENTER=true`) because manual testing showed `infomaxlogin.exe` + 3 seconds + Enter starts Infomax reliably on this PC.
+- Added a settle wait before Excel open (`INFOMAX_READY_SETTLE_SECONDS=120`) because Infomax processes can appear before the Excel add-in bridge is actually ready.
+- Important discovery: Excel opened with `New-Object -ComObject Excel.Application` did not reliably load the Infomax add-in. User-opened Excel did load it. The script now defaults to `INFOMAX_EXCEL_OPEN_MODE=shell`, opens `MARKET DAILY.xlsm` through Windows Shell, then attaches to the running Excel COM instance for refresh/save.
+- `.env.example` documents the new operational knobs:
+  - `INFOMAX_LAUNCHER_PATH`
+  - `INFOMAX_RUNNING_PROCESSES`
+  - `INFOMAX_REQUIRED_PROCESSES`
+  - `INFOMAX_LOGIN_AUTO_SUBMIT`
+  - `INFOMAX_LOGIN_BLIND_ENTER`
+  - `INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS`
+  - `INFOMAX_POST_LOGIN_WAIT_SECONDS`
+  - `INFOMAX_READY_SETTLE_SECONDS`
+  - `INFOMAX_LOGIN_WINDOW_KEYWORDS`
+  - `INFOMAX_STARTUP_WAIT_SECONDS`
+  - `INFOMAX_EXCEL_OPEN_MODE`
+  - `INFOMAX_EXCEL_ATTACH_WAIT_SECONDS`
+- Parent `.env` was left with only the existing local workbook path. The tested behavior is now encoded as script defaults, while `.env.example` documents optional overrides.
+
+Manual test result:
+
+- With Infomax fully closed, ran:
+  `powershell -ExecutionPolicy Bypass -File scripts\Refresh-InfomaxWorkbook.ps1 -WorkbookPath "C:\Users\infomax\Desktop\Market Daily\MARKET DAILY.xlsm" -Visible`
+- Result: Infomax launched, login Enter was sent, processes became ready, the script waited for bridge settle, opened the workbook through Windows Shell, refreshed formulas, waited 90 seconds, saved successfully.
+- Verification performed: PowerShell parser check passed and `git diff --check` passed.
+
 ## 2026-05-27 Admin redesign — workflow-first single screen
 
 사용자 피드백(코덱스 상태보드 4카드/4탭 구조가 실제 업무와 안 맞음)을 받아 Admin을 "한 화면에서 상태 파악 → 데이터 보며 코멘트 작성 → 실물 검증 → 발행" 흐름으로 재설계했다. `src/daily_report/admin/{index.html,app.js,styles.css}`만 수정(서버 API 무변경).
