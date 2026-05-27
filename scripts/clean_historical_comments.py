@@ -204,6 +204,33 @@ def clean_sentence(text: str) -> str:
         "ㅁ미가": "PPI가",
         "We 금일": "WTI는 금일",
         "WTI 는": "WTI는",
+        "대롱령": "대통령",
+        "종재": "총재",
+        "죽소": "축소",
+        "수줄": "수출",
+        "편더멘털": "펀더멘털",
+        "즉면": "측면",
+        "금롱": "금융",
+        "금동 위": "금통위",
+        "금통 위": "금통위",
+        "예상지": "예상치",
+        "예즉": "예측",
+        "부함": "부합",
+        "질어": "짙어",
+        "그졌": "그쳤",
+        "되들리": "되돌리",
+        "줄회": "출회",
+        "손 절": "손절",
+        "가 능성": "가능성",
+        "작은편": "작은 편",
+        "글로별": "글로벌",
+        "종리": "총리",
+        "재경부": "기재부",
+        "국재선물": "국채선물",
+        "금리 a 승": "금리 상승",
+        "a 승": "상승",
+        "of 락": "하락",
+        "Of 감": "마감",
     }
     for src, dst in replacements.items():
         text = text.replace(src, dst)
@@ -219,6 +246,39 @@ def format_comment(sections: dict[str, str]) -> str:
         if text:
             lines.append(f"[{key}]\n{text}")
     return "\n\n".join(lines)
+
+
+SUSPICIOUS_TOKEN_RE = re.compile(r"\b[A-Z]{3,}\]?\b|[ㅏ-ㅣㄱ-ㅎ]{2,}|[『』]")
+
+
+def quality_warnings(comment: str) -> list[str]:
+    warnings = []
+    seen = set()
+    for match in SUSPICIOUS_TOKEN_RE.finditer(comment):
+        token = match.group(0)
+        allowed = {
+            "ADP",
+            "BOE",
+            "CME",
+            "CPI",
+            "ECB",
+            "FOMC",
+            "GDP",
+            "ISM",
+            "PCE",
+            "PMI",
+            "PPI",
+            "RBA",
+            "WTI",
+            "WGBI",
+            "YOY",
+        }
+        if token.rstrip("]") in allowed:
+            continue
+        if token not in seen:
+            warnings.append(f"suspicious_token:{token}")
+            seen.add(token)
+    return warnings
 
 
 def main() -> int:
@@ -263,6 +323,7 @@ def main() -> int:
             raw_text_path.write_text(raw_text + "\n", encoding="utf-8")
             sections, warnings = collect_sections(raw_text)
             comment = format_comment(sections)
+            warnings.extend(quality_warnings(comment))
             clean_dir.mkdir(parents=True, exist_ok=True)
             review_path.write_text(comment + ("\n" if comment else ""), encoding="utf-8")
             results.append(
@@ -284,17 +345,44 @@ def main() -> int:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = output_dir / "cleaned_comments.jsonl"
+    approved_dir = output_dir / "approved"
+    needs_review_dir = output_dir / "needs_review"
+    approved_dir.mkdir(parents=True, exist_ok=True)
+    needs_review_dir.mkdir(parents=True, exist_ok=True)
     with jsonl_path.open("w", encoding="utf-8") as handle:
         for item in results:
             handle.write(json.dumps(asdict(item), ensure_ascii=False) + "\n")
+            target_dir = needs_review_dir if item.warnings else approved_dir
+            (target_dir / f"{item.report_date}.comment.txt").write_text(
+                item.comment + ("\n" if item.comment else ""),
+                encoding="utf-8",
+            )
 
     warning_count = sum(1 for item in results if item.warnings)
+    warning_rows = [
+        {
+            "report_date": item.report_date,
+            "warnings": item.warnings,
+            "review_file": str(needs_review_dir / f"{item.report_date}.comment.txt"),
+            "box_image": item.box_image,
+        }
+        for item in results
+        if item.warnings
+    ]
+    (output_dir / "needs_review.json").write_text(
+        json.dumps(warning_rows, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     summary = {
         "processed": len(results),
         "failures": failures,
         "warning_count": warning_count,
+        "approved_count": len(results) - warning_count,
         "jsonl": str(jsonl_path),
         "review_dir": str(clean_dir),
+        "approved_dir": str(approved_dir),
+        "needs_review_dir": str(needs_review_dir),
+        "needs_review_json": str(output_dir / "needs_review.json"),
         "boxes_dir": str(boxes_dir),
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

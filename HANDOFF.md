@@ -29,6 +29,50 @@
    - `DAILY_REPORT_BASIC_AUTH_PASSWORD`
 4. 배포 후 `https://<service>.onrender.com/report-v2`를 열어 Basic Auth 로그인 후 최신 리포트가 보이는지 확인.
 5. 무료 Render는 idle 후 sleep/cold start가 있으므로 내일 동료에게 보여주기 2~3분 전에 한 번 접속해 깨워둔다. 장기 운영은 유료 Web Service로 전환.
+## 2026-05-27 Historical PNG comments and investor-flow UI
+
+User clarified that historical comments must come only from the yellow comment box in the lower-right of each monthly PNG (`C:\Users\infomax\Desktop\Market Daily\2507` ... `2605`), not from surrounding tables.
+
+- Added `scripts/clean_historical_comments.py`.
+- The script can scan monthly PNG folders with:
+  `.\.venv-docling\Scripts\python.exe scripts\clean_historical_comments.py --source-root "C:\Users\infomax\Desktop\Market Daily" --force`
+- It detects the yellow comment box, OCRs only that region, extracts `[국내]` and `[해외]`, and writes review outputs under `data\historical_ocr\cleaned_comments\`.
+- Current run result:
+  - Source PNG dates: 200
+  - Processed: 200
+  - Failures: 0
+  - Section missing: 0
+  - Approved/high-confidence: 67
+  - Needs manual review: 133
+- Public report fallback now reads only `data\historical_ocr\cleaned_comments\approved\{date}.comment.txt`. It no longer auto-displays raw OCR or unapproved review text. This prevents PHIL/구리/table rows and suspicious OCR tokens from leaking into `/report-v2`.
+- `needs_review.json` lists dates/tokens/images needing manual correction. Do not bulk upload those to `report_comments` until reviewed.
+- Example behavior after restart:
+  - `2026-04-15`: `historical_comment_source=cleaned_png_comment`, approved comment appears.
+  - `2026-05-22`: has suspicious tokens, so no historical fallback is shown until corrected/approved.
+
+Report V2 UI changes:
+
+- Removed duplicated hero/comment text below `Market Daily`; `Daily Brief` now carries the commentary.
+- Removed the `전일 국내외 채권시장 영향 요약` subheading; only `Daily Brief` remains.
+- `[국내]` and `[해외]` are rendered as separate small section headings with body text below.
+- Investor flows were separated from the equities card into a full-width `투자자별 매매 동향` card between equities and FX/commodities.
+- Investor-flow card layout:
+  - 주식: KOSPI, KOSDAQ, KOSPI200 선물
+  - 채권: 국채선물 3년, 국채선물 10년
+  - columns: 외국인 / 기관 / 개인
+
+Important remaining work:
+
+- Historical market data before the investor-flow mapping was restored still has only 35 observations. Example: `2026-04-15` has `flows=0`; latest `2026-05-26` has `flows=15`. Backfill old report rows from the workbook/current 50-metric mapping if investor-flow history is needed for old dates.
+- Some report dates exist without matching PNG files, so they will not have historical comments unless source images are found or comments are written manually.
+- The 133 `needs_review` comments should be corrected against their `boxes\*.comment_box.png` images, then moved/copied into `approved\{date}.comment.txt` or saved to Supabase `report_comments.final_comment`.
+
+Validation:
+
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\report_v2\app.js`
+- `.\.venv-docling\Scripts\python.exe -m py_compile scripts\clean_historical_comments.py`
+- `powershell -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` passed with latest `2026-05-26`, observations `50`, metric `kospi`, points `291`.
 
 ## 2026-05-27 Infomax/Excel startup automation fix
 

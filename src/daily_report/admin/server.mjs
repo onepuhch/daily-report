@@ -18,7 +18,7 @@ const reportDir = path.join(projectRoot, 'src', 'daily_report', 'report');
 const reportV2Dir = path.join(projectRoot, 'src', 'daily_report', 'report_v2');
 const logsDir = path.join(projectRoot, 'data', 'logs');
 const researchDir = path.join(projectRoot, 'data', 'research');
-const cleanedHistoricalCommentDir = path.join(projectRoot, 'data', 'historical_ocr', 'cleaned_comments', 'review');
+const cleanedHistoricalCommentDir = path.join(projectRoot, 'data', 'historical_ocr', 'cleaned_comments', 'approved');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
 const defaultHost = process.env.DAILY_REPORT_ADMIN_HOST || process.env.HOST || '127.0.0.1';
 const execFileAsync = promisify(execFile);
@@ -1183,7 +1183,7 @@ async function mapSupabaseCommentWithFallback(row, status = 'draft') {
 
   try {
     const cleanedComment = (await readFile(
-      path.join(cleanedHistoricalCommentDir, `${row.report_date}.comment.review.txt`),
+      path.join(cleanedHistoricalCommentDir, `${row.report_date}.comment.txt`),
       'utf8',
     )).trim();
     if (!cleanedComment) return comment;
