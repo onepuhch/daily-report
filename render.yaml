@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: daily-report-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: DAILY_REPORT_ADMIN_HOST
+        value: 0.0.0.0
+      - key: DAILY_REPORT_READ_ONLY
+        value: true
+      - key: DAILY_REPORT_AI_PROVIDER
+        value: rule_based
+      - key: REPORT_TIMEZONE
+        value: Asia/Seoul
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DAILY_REPORT_BASIC_AUTH_USER
+        sync: false
+      - key: DAILY_REPORT_BASIC_AUTH_PASSWORD
+        sync: false

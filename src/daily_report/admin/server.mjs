@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -19,6 +19,7 @@ const reportV2Dir = path.join(projectRoot, 'src', 'daily_report', 'report_v2');
 const logsDir = path.join(projectRoot, 'data', 'logs');
 const researchDir = path.join(projectRoot, 'data', 'research');
 const defaultPort = Number(process.env.DAILY_REPORT_ADMIN_PORT || process.env.PORT || 4173);
+const defaultHost = process.env.DAILY_REPORT_ADMIN_HOST || process.env.HOST || '127.0.0.1';
 const execFileAsync = promisify(execFile);
 
 const categoryLabels = {
@@ -53,6 +54,49 @@ function sendJson(res, statusCode, payload) {
 function sendText(res, statusCode, text) {
   res.writeHead(statusCode, { 'content-type': 'text/plain; charset=utf-8' });
   res.end(text);
+}
+
+function isTruthy(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function requireBasicAuth(req, res) {
+  const expectedUser = process.env.DAILY_REPORT_BASIC_AUTH_USER || '';
+  const expectedPassword = process.env.DAILY_REPORT_BASIC_AUTH_PASSWORD || '';
+  if (!expectedUser || !expectedPassword) return true;
+
+  const header = req.headers.authorization || '';
+  const match = header.match(/^Basic\s+(.+)$/i);
+  if (match) {
+    const decoded = Buffer.from(match[1], 'base64').toString('utf8');
+    const separator = decoded.indexOf(':');
+    const user = separator >= 0 ? decoded.slice(0, separator) : '';
+    const password = separator >= 0 ? decoded.slice(separator + 1) : '';
+    if (safeEqual(user, expectedUser) && safeEqual(password, expectedPassword)) {
+      return true;
+    }
+  }
+
+  res.writeHead(401, {
+    'content-type': 'text/plain; charset=utf-8',
+    'www-authenticate': 'Basic realm="Daily Report"',
+    'cache-control': 'no-store',
+  });
+  res.end('Authentication required');
+  return false;
+}
+
+function isBlockedByReadOnlyMode(method, requestPath) {
+  if (!isTruthy(process.env.DAILY_REPORT_READ_ONLY)) return false;
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return false;
+  return !(method === 'POST' && requestPath === '/api/ask');
 }
 
 function isDate(value) {
@@ -2634,6 +2678,17 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (!requireBasicAuth(req, res)) {
+      return;
+    }
+
+    if (isBlockedByReadOnlyMode(req.method, requestPath)) {
+      sendJson(res, 403, {
+        error: 'This demo deployment is read-only. Run the local Admin server to save, publish, or rerun jobs.',
+      });
+      return;
+    }
+
     if (req.method === 'GET' && requestPath === '/api/ai/provider') {
       sendJson(res, 200, getAiProviderStatus());
       return;
@@ -2755,6 +2810,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(defaultPort, '127.0.0.1', () => {
-  console.log(`Daily Report Admin: http://127.0.0.1:${defaultPort}`);
+server.listen(defaultPort, defaultHost, () => {
+  const displayHost = defaultHost === '0.0.0.0' ? '127.0.0.1' : defaultHost;
+  console.log(`Daily Report Admin: http://${displayHost}:${defaultPort}`);
 });

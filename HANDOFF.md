@@ -1,5 +1,35 @@
 # Daily Report Handoff
 
+## 2026-05-27 Render demo deployment prep
+
+동료 외부 리뷰용 클라우드 배포 준비를 추가했다. 목표는 내일 임시 공개 URL로 `/report-v2`를 보여주되, 저장/발행/재실행은 막는 읽기 전용 데모다.
+
+- `src/daily_report/admin/server.mjs`
+  - `DAILY_REPORT_ADMIN_HOST` 지원 추가. Render에서는 `0.0.0.0`, 로컬 기본값은 기존처럼 `127.0.0.1`.
+  - `DAILY_REPORT_BASIC_AUTH_USER` / `DAILY_REPORT_BASIC_AUTH_PASSWORD`가 설정되면 `/api/health`를 제외한 전체 화면/API에 Basic Auth 적용.
+  - `DAILY_REPORT_READ_ONLY=true`이면 `GET/HEAD/OPTIONS`와 `/api/ask` 외 POST/PUT/PATCH/DELETE를 403으로 차단. 데모 URL에서 코멘트 저장, 발행, 작업 재실행 방지 목적.
+- `render.yaml` 추가: Render Free Web Service용 blueprint. `DAILY_REPORT_ADMIN_HOST=0.0.0.0`, `DAILY_REPORT_READ_ONLY=true`, `DAILY_REPORT_AI_PROVIDER=rule_based` 기본값 포함.
+- `docs/RENDER_DEPLOYMENT.md` 추가: Render 생성, 환경변수, 접속 URL, 운영 주의사항 정리.
+- `.env.example`에 서버 host/auth/read-only env 문서화.
+
+검증:
+- `node --check src\daily_report\admin\server.mjs` 통과.
+- Basic Auth/read-only 로컬 테스트 통과: health 200, 미인증 reports 401, 인증 reports 200, read-only comment POST 403.
+- `git diff --check` 통과.
+- `scripts\verify-pipeline.cmd` 통과(latest `2026-05-26`, observations 50, KOSPI series 291).
+
+다음 할 일:
+1. 이 커밋을 GitHub에 push.
+2. Render에서 GitHub repo 연결 → `render.yaml` 적용.
+3. Render 환경변수 설정:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `DAILY_REPORT_BASIC_AUTH_USER`
+   - `DAILY_REPORT_BASIC_AUTH_PASSWORD`
+4. 배포 후 `https://<service>.onrender.com/report-v2`를 열어 Basic Auth 로그인 후 최신 리포트가 보이는지 확인.
+5. 무료 Render는 idle 후 sleep/cold start가 있으므로 내일 동료에게 보여주기 2~3분 전에 한 번 접속해 깨워둔다. 장기 운영은 유료 Web Service로 전환.
+
 ## 2026-05-27 Infomax/Excel startup automation fix
 
 Fixed the 07:00 batch failure path where Infomax was sometimes closed before the scheduled run.
