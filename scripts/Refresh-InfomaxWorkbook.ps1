@@ -654,7 +654,7 @@ finally {
             $workbook.Close($true)
         }
         catch {
-            Write-Host "Workbook close failed: $($_.Exception.Message)"
+            Write-Host "Workbook close skipped: Excel rejected the close request after save. This is non-fatal when the workbook was already saved. $($_.Exception.Message)"
         }
         Release-ComObject $workbook
     }

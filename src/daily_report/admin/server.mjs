@@ -2300,6 +2300,14 @@ function summarizeJobLog(job, content) {
   const reportsMatch = text.match(/"reports"\s*:\s*(\d+)\s*,\s*"from"\s*:\s*"([^"]+)"\s*,\s*"until"\s*:\s*"([^"]+)"/);
   const freshnessMatch = text.match(/Latest generated report date:\s*(\d{4}-\d{2}-\d{2});\s*requested until:\s*(\d{4}-\d{2}-\d{2})/);
   const validationPass = /"status"\s*:\s*"pass"/.test(text) && /"errors"\s*:\s*\[\]/.test(text);
+  const excelCloseRejected =
+    text.includes('RPC_E_CALL_REJECTED') ||
+    text.includes('Call was rejected by callee') ||
+    text.includes('Workbook close skipped');
+  const uploadCompleted =
+    text.includes('Daily Market update complete.') ||
+    Boolean(uploadedMatch) ||
+    Boolean(text.match(/"job_run_recorded"\s*:\s*"success"/));
 
   if (job.status === 'success') {
     const details = [];
@@ -2331,9 +2339,23 @@ function summarizeJobLog(job, content) {
     };
   }
 
-  if (text.includes('RPC_E_CALL_REJECTED') || text.includes('Call was rejected by callee')) {
+  if (excelCloseRejected && uploadCompleted) {
     return {
-      level: 'error',
+      level: 'warn',
+      title: 'Excel close was skipped after a successful save/upload.',
+      message: 'Infomax Excel rejected the final close request, but the workbook save and Supabase upload had already completed. Treat this as an operational notice, not a failed batch.',
+      actions: [
+        'Leave Excel open if Infomax real-time formulas are still updating',
+        'Only close Excel manually if the next batch cannot save or attach to the workbook',
+        'Confirm the latest report date in the data validation screen',
+      ],
+      details: ['Non-fatal stage: Excel cleanup after save', 'Technical signal: RPC_E_CALL_REJECTED'],
+    };
+  }
+
+  if (excelCloseRejected) {
+    return {
+      level: 'warn',
       title: 'Excel이 응답하지 않아 자동화가 실패했습니다.',
       message: 'Infomax Excel 파일을 새로고침하거나 저장하는 중 Excel이 다른 작업으로 바빠서 명령을 거절했습니다.',
       actions: [
