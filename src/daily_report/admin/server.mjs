@@ -1127,6 +1127,16 @@ function mapSupabaseComment(row, status = 'draft') {
   };
 }
 
+function hasUsableCommentText(comment = {}) {
+  const text = String(comment.final_comment || comment.auto_comment || '').trim();
+  if (!text) return false;
+  const compact = text.replace(/\s+/g, '');
+  if (/^\?+$/.test(compact)) return false;
+  const questionMarks = (text.match(/\?/g) || []).length;
+  if (questionMarks >= 3 && questionMarks / Math.max(text.length, 1) > 0.25) return false;
+  return true;
+}
+
 function sourceDocumentToResearchItem(row = {}) {
   const text = row.extracted_text || row.summary || '';
   return {
@@ -1179,16 +1189,21 @@ async function getHistoricalCommentDocuments(date) {
 
 async function mapSupabaseCommentWithFallback(row, status = 'draft') {
   const comment = mapSupabaseComment(row.report_comments, status);
-  if (comment.final_comment || comment.auto_comment) return comment;
+  if (hasUsableCommentText(comment)) return comment;
+  const fallbackBase = {
+    ...comment,
+    auto_comment: '',
+    final_comment: '',
+  };
 
   try {
     const cleanedComment = (await readFile(
       path.join(cleanedHistoricalCommentDir, `${row.report_date}.comment.txt`),
       'utf8',
     )).trim();
-    if (!cleanedComment) return comment;
+    if (!cleanedComment) return fallbackBase;
     return {
-      ...comment,
+      ...fallbackBase,
       auto_comment: cleanedComment,
       reference_note: comment.reference_note || 'Loaded from cleaned historical PNG comment box.',
       tags: [...new Set([...(comment.tags || []), 'historical', 'png-cleaned'])],
@@ -1198,7 +1213,7 @@ async function mapSupabaseCommentWithFallback(row, status = 'draft') {
     if (error.code !== 'ENOENT') {
       console.warn(`Cleaned historical comment unavailable for ${row.report_date}: ${error.message}`);
     }
-    return comment;
+    return fallbackBase;
   }
 }
 

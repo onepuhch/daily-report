@@ -248,7 +248,7 @@ def format_comment(sections: dict[str, str]) -> str:
     return "\n\n".join(lines)
 
 
-SUSPICIOUS_TOKEN_RE = re.compile(r"\b[A-Z]{3,}\]?\b|[ㅏ-ㅣㄱ-ㅎ]{2,}|[『』]")
+SUSPICIOUS_TOKEN_RE = re.compile(r"\b[A-Z]{3,}\]?\b|[A-Za-z][A-Za-z|\[\]]+\b|\?{2,}|[ㅏ-ㅣㄱ-ㅎ]{2,}|[『』]")
 
 
 def quality_warnings(comment: str) -> list[str]:
@@ -265,6 +265,7 @@ def quality_warnings(comment: str) -> list[str]:
             "FOMC",
             "GDP",
             "ISM",
+            "MOM",
             "PCE",
             "PMI",
             "PPI",
@@ -273,7 +274,8 @@ def quality_warnings(comment: str) -> list[str]:
             "WGBI",
             "YOY",
         }
-        if token.rstrip("]") in allowed:
+        normalized = token.rstrip("]").upper()
+        if normalized in allowed:
             continue
         if token not in seen:
             warnings.append(f"suspicious_token:{token}")
@@ -349,6 +351,9 @@ def main() -> int:
     needs_review_dir = output_dir / "needs_review"
     approved_dir.mkdir(parents=True, exist_ok=True)
     needs_review_dir.mkdir(parents=True, exist_ok=True)
+    for stale_dir in (approved_dir, needs_review_dir):
+        for stale_file in stale_dir.glob("*.comment.txt"):
+            stale_file.unlink()
     with jsonl_path.open("w", encoding="utf-8") as handle:
         for item in results:
             handle.write(json.dumps(asdict(item), ensure_ascii=False) + "\n")
