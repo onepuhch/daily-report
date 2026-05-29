@@ -183,6 +183,27 @@ function Get-ExcelAttachWaitSeconds {
     return 60
 }
 
+function Get-InfomaxRecoveryRetries {
+    param($EnvValues)
+
+    return Get-EnvInt -EnvValues $EnvValues -Name "INFOMAX_RECOVERY_RETRIES" -DefaultValue 1 -MinimumValue 0
+}
+
+function Get-InfomaxRestartProcessNames {
+    param($EnvValues)
+
+    $configured = $EnvValues["INFOMAX_RESTART_PROCESSES"]
+    if ($configured) {
+        return @(
+            $configured -split "," |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { $_ }
+        )
+    }
+
+    return @("EXCEL", "infomaxmain", "imxlcommapp", "infomaxlogin")
+}
+
 function Get-EnvBool {
     param(
         $EnvValues,
@@ -220,6 +241,26 @@ function Get-EnvInt {
     }
 }
 
+function Stop-InfomaxExcelSession {
+    param([string[]]$ProcessNames)
+
+    Write-Host "Restarting stale Infomax/Excel session. Stopping process(es): $($ProcessNames -join ', ')"
+    foreach ($processName in $ProcessNames) {
+        $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+        foreach ($process in $processes) {
+            try {
+                Write-Host "Stopping $($process.ProcessName) pid=$($process.Id)"
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Host "Could not stop $($process.ProcessName) pid=$($process.Id): $($_.Exception.Message)"
+            }
+        }
+    }
+
+    Start-Sleep -Seconds 5
+}
+
 function Get-ActiveExcelApplication {
     try {
         return [Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
@@ -246,6 +287,52 @@ function Get-WorkbookByPath {
     }
 
     return $null
+}
+
+function Assert-NoLookupFailures {
+    param($Workbook)
+
+    $matches = @()
+    foreach ($sheet in @($Workbook.Worksheets)) {
+        try {
+            $usedRange = $sheet.UsedRange
+            $values = $usedRange.Value2
+            if ($null -eq $values) {
+                continue
+            }
+
+            if ($values -is [Array]) {
+                $rowLower = $values.GetLowerBound(0)
+                $rowUpper = $values.GetUpperBound(0)
+                $colLower = $values.GetLowerBound(1)
+                $colUpper = $values.GetUpperBound(1)
+                for ($row = $rowLower; $row -le $rowUpper; $row += 1) {
+                    for ($col = $colLower; $col -le $colUpper; $col += 1) {
+                        $cellValue = $values[$row, $col]
+                        if ($null -ne $cellValue -and $cellValue.ToString().Contains("조회 실패")) {
+                            $matches += "$($sheet.Name)!R$row`C$col"
+                            if ($matches.Count -ge 10) {
+                                break
+                            }
+                        }
+                    }
+                    if ($matches.Count -ge 10) {
+                        break
+                    }
+                }
+            }
+            elseif ($values.ToString().Contains("조회 실패")) {
+                $matches += "$($sheet.Name)!UsedRange"
+            }
+        }
+        catch {
+            Write-Host "Lookup failure scan skipped for sheet '$($sheet.Name)': $($_.Exception.Message)"
+        }
+    }
+
+    if ($matches.Count -gt 0) {
+        throw "Infomax lookup failure detected before save. Workbook was not saved. Cells: $($matches -join ', ')"
+    }
 }
 
 function Open-WorkbookWithShell {
@@ -582,71 +669,124 @@ try {
     $autoSubmitLogin = Get-EnvBool -EnvValues $envValues -Name "INFOMAX_LOGIN_AUTO_SUBMIT" -DefaultValue $true
     $blindEnterLogin = Get-EnvBool -EnvValues $envValues -Name "INFOMAX_LOGIN_BLIND_ENTER" -DefaultValue $true
     $loginSubmitDelaySeconds = Get-EnvInt -EnvValues $envValues -Name "INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS" -DefaultValue 3 -MinimumValue 0
-    Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
-    Test-InfomaxRunning `
-        -RequiredProcesses $requiredInfomaxProcesses `
-        -RunningProcesses $runningInfomaxProcesses `
-        -InfomaxLauncherPath $infomaxLauncherPath `
-        -StartupWaitSeconds $infomaxStartupWaitSeconds `
-        -AutoSubmitLogin $autoSubmitLogin `
-        -LoginSubmitDelaySeconds $loginSubmitDelaySeconds `
-        -PostLoginWaitSeconds $infomaxPostLoginWaitSeconds `
-        -BlindEnter $blindEnterLogin `
-        -LoginWindowKeywords $infomaxLoginWindowKeywords
-    Write-Host "Infomax process check passed."
-    if ($infomaxReadySettleSeconds -gt 0) {
-        Write-Host "Waiting $infomaxReadySettleSeconds seconds for Infomax add-in bridge to settle before opening Excel..."
-        Start-Sleep -Seconds $infomaxReadySettleSeconds
-    }
-    Write-Host ""
+    $recoveryRetries = Get-InfomaxRecoveryRetries -EnvValues $envValues
+    $restartProcessNames = Get-InfomaxRestartProcessNames -EnvValues $envValues
+    $maxAttempts = 1 + $recoveryRetries
 
-    if ($excelOpenMode -eq "com") {
-        $opened = Open-WorkbookWithCom -WorkbookPath $WorkbookPath -Visible ([bool]$Visible)
-    }
-    else {
-        $opened = Open-WorkbookWithShell `
-            -WorkbookPath $WorkbookPath `
-            -AttachWaitSeconds $excelAttachWaitSeconds `
-            -Visible ([bool]$Visible)
-    }
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt += 1) {
+        $isRecoveryAttempt = $attempt -gt 1
+        if ($isRecoveryAttempt) {
+            Stop-InfomaxExcelSession -ProcessNames $restartProcessNames
+        }
 
-    $excel = $opened.Excel
-    $workbook = $opened.Workbook
-    $ownsExcel = [bool]$opened.OwnsExcel
+        try {
+            Write-Host "Refresh attempt $attempt/$maxAttempts."
+            Write-Host "Checking Infomax process(es): $($requiredInfomaxProcesses -join ', ')"
+            Test-InfomaxRunning `
+                -RequiredProcesses $requiredInfomaxProcesses `
+                -RunningProcesses $runningInfomaxProcesses `
+                -InfomaxLauncherPath $infomaxLauncherPath `
+                -StartupWaitSeconds $infomaxStartupWaitSeconds `
+                -AutoSubmitLogin $autoSubmitLogin `
+                -LoginSubmitDelaySeconds $loginSubmitDelaySeconds `
+                -PostLoginWaitSeconds $infomaxPostLoginWaitSeconds `
+                -BlindEnter $blindEnterLogin `
+                -LoginWindowKeywords $infomaxLoginWindowKeywords
+            Write-Host "Infomax process check passed."
+            if ($infomaxReadySettleSeconds -gt 0) {
+                Write-Host "Waiting $infomaxReadySettleSeconds seconds for Infomax add-in bridge to settle before opening Excel..."
+                Start-Sleep -Seconds $infomaxReadySettleSeconds
+            }
+            Write-Host ""
 
-    try {
-        $excel.DisplayAlerts = $false
-        $excel.AskToUpdateLinks = $false
-    }
-    catch {
-        Write-Host "Could not update Excel alert settings. Continuing."
-    }
+            if ($excelOpenMode -eq "com") {
+                $opened = Open-WorkbookWithCom -WorkbookPath $WorkbookPath -Visible ([bool]$Visible)
+            }
+            else {
+                $opened = Open-WorkbookWithShell `
+                    -WorkbookPath $WorkbookPath `
+                    -AttachWaitSeconds $excelAttachWaitSeconds `
+                    -Visible ([bool]$Visible)
+            }
 
-    Write-Host "Refreshing workbook connections and formulas..."
-    $workbook.RefreshAll()
+            $excel = $opened.Excel
+            $workbook = $opened.Workbook
+            $ownsExcel = [bool]$opened.OwnsExcel
 
-    try {
-        $excel.CalculateUntilAsyncQueriesDone()
-    }
-    catch {
-        Write-Host "CalculateUntilAsyncQueriesDone is not available in this Excel session. Continuing."
-    }
+            try {
+                $excel.DisplayAlerts = $false
+                $excel.AskToUpdateLinks = $false
+            }
+            catch {
+                Write-Host "Could not update Excel alert settings. Continuing."
+            }
 
-    try {
-        $excel.CalculateFullRebuild()
-    }
-    catch {
-        Write-Host "CalculateFullRebuild failed. Continuing after RefreshAll."
-    }
+            Write-Host "Refreshing workbook connections and formulas..."
+            $workbook.RefreshAll()
 
-    if ($WaitSeconds -gt 0) {
-        Write-Host "Waiting $WaitSeconds seconds for Infomax formulas to finish..."
-        Start-Sleep -Seconds $WaitSeconds
-    }
+            try {
+                $excel.CalculateUntilAsyncQueriesDone()
+            }
+            catch {
+                Write-Host "CalculateUntilAsyncQueriesDone is not available in this Excel session. Continuing."
+            }
 
-    Write-Host "Saving workbook..."
-    $workbook.Save()
-    Write-Host "Done. Workbook refreshed and saved."
+            try {
+                $excel.CalculateFullRebuild()
+            }
+            catch {
+                Write-Host "CalculateFullRebuild failed. Continuing after RefreshAll."
+            }
+
+            if ($WaitSeconds -gt 0) {
+                Write-Host "Waiting $WaitSeconds seconds for Infomax formulas to finish..."
+                Start-Sleep -Seconds $WaitSeconds
+            }
+
+            Write-Host "Checking workbook for Infomax lookup failures before save..."
+            Assert-NoLookupFailures -Workbook $workbook
+
+            Write-Host "Saving workbook..."
+            $workbook.Save()
+            Write-Host "Done. Workbook refreshed and saved."
+            break
+        }
+        catch {
+            $message = $_.Exception.Message
+            Write-Host "Refresh attempt $attempt failed: $message"
+            if ($attempt -ge $maxAttempts) {
+                throw
+            }
+
+            if ($null -ne $workbook) {
+                try {
+                    $workbook.Close($false)
+                }
+                catch {
+                    Write-Host "Workbook close after failed attempt skipped: $($_.Exception.Message)"
+                }
+                Release-ComObject $workbook
+                $workbook = $null
+            }
+
+            if ($null -ne $excel) {
+                if ($ownsExcel) {
+                    try {
+                        $excel.Quit()
+                    }
+                    catch {
+                        Write-Host "Excel quit after failed attempt skipped: $($_.Exception.Message)"
+                    }
+                }
+                Release-ComObject $excel
+                $excel = $null
+            }
+
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+            Write-Host "Retrying after Infomax/Excel restart..."
+        }
+    }
 }
 finally {
     if ($null -ne $workbook) {

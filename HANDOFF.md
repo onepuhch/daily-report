@@ -1,5 +1,28 @@
 # Daily Report Handoff
 
+## 2026-05-29 Infomax stale-session recovery
+
+Today's 07:00 batch failed before JSON/upload:
+
+- Log: `data\logs\daily_update_20260529_070002.log`
+- Infomax process check passed (`infomaxmain`, `imxlcommapp` existed), but Excel COM attachment failed within 60 seconds after opening the workbook through shell.
+- Supabase latest remained `2026-05-27`; expected latest was `2026-05-28`.
+- Manual restart of Infomax fixed Excel formulas, confirming the failure mode was a stale/broken Infomax add-in session, not missing workbook data.
+
+Changed `scripts\Refresh-InfomaxWorkbook.ps1`:
+
+- First attempt still reuses an already-running Infomax session.
+- If refresh fails before save, the script now performs one recovery retry by default:
+  - stop `EXCEL`, `infomaxmain`, `imxlcommapp`, `infomaxlogin`
+  - start `infomaxlogin.exe`
+  - submit login using the existing Enter flow
+  - wait for Infomax/add-in settle
+  - reopen Excel through shell
+- Before saving, the workbook is scanned for the literal `조회 실패`; if found, the script throws and does not save/upload.
+- Config knobs:
+  - `INFOMAX_RECOVERY_RETRIES` default `1`
+  - `INFOMAX_RESTART_PROCESSES` default `EXCEL,infomaxmain,imxlcommapp,infomaxlogin`
+
 ## 2026-05-28 Report V2 data/UI follow-up
 
 Checked today's 07:00 batch and Report V2 data path after the Excel close warning change.
