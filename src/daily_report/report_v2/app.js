@@ -108,6 +108,54 @@ const CATEGORY_ORDER = [
   'commodities',
 ];
 
+const METRIC_ORDER = [
+  'cd_91d',
+  'monetary_stab_1y',
+  'monetary_stab_2y',
+  'kr_gov_3y',
+  'kr_gov_5y',
+  'kr_gov_10y',
+  'bank_aaa_3m',
+  'bank_aaa_1y',
+  'bank_aaa_2y',
+  'bank_aaa_3y',
+  'bank_aaa_5y',
+  'kr_corp_aa0_1y',
+  'kr_corp_aa0_3y',
+  'other_fin_aa_minus_2y',
+  'kr_gov_2y',
+  'kr_gov_30y',
+  'us_treasury_2y',
+  'us_treasury_10y',
+  'us_treasury_30y',
+  'germany_bund_10y',
+  'japan_gov_10y',
+  'credit_spread_aa0_2y',
+  'kospi',
+  'kospi200',
+  'kosdaq',
+  'usdkrw',
+  'dow',
+  'sp500',
+  'nasdaq',
+  'nikkei225',
+  'hangseng_h',
+  'dax',
+  'dollar_index',
+  'usdjpy',
+  'eurusd',
+  'btc_usd',
+  'eth_usd',
+  'wti',
+  'brent',
+  'gold',
+  'silver',
+  'sox',
+  'copper',
+];
+
+const METRIC_ORDER_INDEX = new Map(METRIC_ORDER.map((key, index) => [key, index]));
+
 const TREND_SLOT_META = [
   { title: '금리', tone: 'blue' },
   { title: '주식', tone: 'green' },
@@ -942,7 +990,12 @@ function categoryItems(observations, category) {
     const excluded = new Set(category.excludeMetricKeys);
     items = items.filter((item) => !excluded.has(item.metric_key));
   }
-  return items;
+  return items.slice().sort((a, b) => {
+    const aOrder = METRIC_ORDER_INDEX.get(a.metric_key) ?? 9999;
+    const bOrder = METRIC_ORDER_INDEX.get(b.metric_key) ?? 9999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return String(a.metric_name || '').localeCompare(String(b.metric_name || ''), 'ko-KR');
+  });
 }
 
 function renderGrid(report) {

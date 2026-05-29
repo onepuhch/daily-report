@@ -1,5 +1,65 @@
 # Daily Report Handoff
 
+## 2026-05-29 PNG visible metric coverage
+
+User requirement clarified: every numeric row visible in the monthly PNG report tables should be represented in the DB and public report UI, excluding the yellow comment box text.
+
+- Added visible domestic-rate rows that were previously excluded from the active Excel mapping:
+  - `monetary_stab_1y`, `monetary_stab_2y`
+  - `bank_aaa_3m`, `bank_aaa_1y`, `bank_aaa_2y`, `bank_aaa_3y`, `bank_aaa_5y`
+  - `kr_corp_aa0_1y`, `other_fin_aa_minus_2y`
+  - Existing `kr_corp_aa0_3y` is now categorized under `domestic_rates` so it appears with the PNG domestic-rate table.
+- Updated both active mapping copies:
+  - `scripts/Export-MarketDailyCachedValues.ps1`
+  - `scripts/import_historical_market_data.py`
+- Updated `src/daily_report/report_v2/app.js` to sort metrics in the same practical order as the PNG tables, so newly added rows do not appear at the bottom due Supabase `created_at` ordering.
+- Re-uploaded Supabase observations from `2025-06-02` through `2026-05-28` after adding the metrics:
+  - 242 reports uploaded
+  - 11,032 observations uploaded
+  - Latest `2026-05-28` validation now passes with 59 observations.
+- Added/updated `scripts/compare_png_report_data.py`:
+  - Compares 55 visible metric cells per PNG.
+  - Reads section header dates from PNG boxes and uses those dates per section instead of assuming the PNG filename date.
+  - Output files:
+    - `data/png_report_validation/png_report_data_comparison.csv`
+    - `data/png_report_validation/png_report_data_comparison_summary.json`
+- Full PNG comparison over 200 PNGs completed:
+  - 11,000 cells checked
+  - 6,557 matched
+  - 668 OCR failures
+  - 1,477 OCR/date/value mismatches
+  - 2,298 DB missing cells
+- Key finding: newly added domestic-rate rows now match for current samples, e.g. 2026-05-27 PNG vs section date 2026-05-26 matched 통안채/은행채/회사채/기타금융채 values exactly.
+- Remaining DB-missing cells are dominated by historical investor-flow rows. The current Excel workbook does not contain those older investor-flow dates, so Excel re-upload cannot fill them. A separate PNG backfill is needed for old investor-flow values if the web must show them for all historical PNG dates.
+
+### Investor-flow PNG backfill
+
+- Added `scripts/backfill_investor_flows_from_png.py` to extract the 5x3 투자자별 매매 동향 matrix from historical PNGs.
+  - Uses the 국내 주식 및 환율 section date as the observed/report date.
+  - Crops each investor-flow numeric cell, enlarges it, runs number-only Tesseract OCR, and uploads only missing observations.
+  - Existing Excel-sourced investor-flow rows are preserved.
+- Ran full backfill over 200 PNGs:
+  - Extracted 3,000 investor-flow cells.
+  - Uploaded 1,182 missing observations to Supabase.
+  - Skipped 1,818 rows because matching observations already existed or duplicate PNG candidates pointed to the same report date/metric.
+  - OCR failures: 0.
+- Audit outputs:
+  - `data/png_investor_flow_backfill/summary.json`
+  - `data/png_investor_flow_backfill/investor_flow_extracted.csv`
+  - `data/png_investor_flow_backfill/investor_flow_upload_rows.csv`
+  - `data/png_investor_flow_backfill/investor_flow_skipped.csv`
+- Post-backfill Supabase checks:
+  - `2025-07-14` now has 15 investor-flow observations from `historical_png_table`.
+  - Recent dates such as `2026-05-26` and `2026-05-28` still have 15 investor-flow observations from `infomax_excel_cached`.
+  - `market_observations` count increased to 15,257.
+- Re-ran full PNG comparison after backfill:
+  - 11,000 cells checked
+  - 7,911 matched
+  - 668 OCR failures
+  - 2,286 OCR/date/value mismatches
+  - 135 DB missing cells
+- Remaining mismatches are mostly full-page OCR limitations in commodities/crypto/investor-flow checks rather than confirmed DB gaps. Use the backfill audit CSVs and cropped-cell OCR script for investor-flow review instead of the older full-page OCR comparison rows.
+
 ## 2026-05-29 Infomax stale-session recovery
 
 Today's 07:00 batch failed before JSON/upload:

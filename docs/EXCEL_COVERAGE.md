@@ -1,6 +1,8 @@
 # Excel Coverage
 
-Last checked: 2026-05-25
+Last checked: 2026-05-29
+
+2026-05-29 update: the public report target is now "all numeric rows visible in the monthly PNG report tables." 통안채, 은행채 AAA, 회사채 AA0 1년, and 기타금융채 AA- 2년 were moved from excluded/deferred coverage into the active metric mapping.
 
 ## Scope
 
@@ -57,8 +59,8 @@ Latest automated source coverage check:
 
 Result:
 
-- Expected mapped metrics: 50
-- Local workbook extraction observations: 50
+- Expected mapped metrics: 59
+- Local workbook extraction observations: 59 for latest `2026-05-28`
 - Admin API observations: 35 for Supabase latest `2026-05-21`
 - Missing mapped metrics from local workbook extraction: 0
 - Python/PowerShell mapping parity: 50 vs 50, mismatch 0

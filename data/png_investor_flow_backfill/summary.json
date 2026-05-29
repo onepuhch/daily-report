@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-05-29T17:16:57",
+  "png_count": 200,
+  "extracted_rows": 3000,
+  "upload_candidates": 1182,
+  "uploaded_rows": 1182,
+  "skipped_rows": 1818,
+  "failures": 0,
+  "dry_run": false,
+  "output_dir": "C:\\Users\\infomax\\Desktop\\Market Daily\\project\\daily-report\\data\\png_investor_flow_backfill"
+}
