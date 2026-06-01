@@ -737,26 +737,36 @@ svg { display: block; }
 .market-right-stack {
   display: grid;
   min-width: 0;
-  gap: 12px;
+  align-self: stretch;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
 }
 .market-right-stack .category-card { width: 100%; }
-.investor-card { grid-column: auto; }
+.investor-card {
+  display: flex;
+  grid-column: auto;
+  flex-direction: column;
+}
 .investor-matrix-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  padding: 18px 22px 22px;
+  flex: 1;
+  grid-template-columns: 1fr;
+  align-content: stretch;
+  gap: 12px;
+  padding: 16px 22px 18px;
 }
 .investor-matrix-section {
+  display: grid;
+  grid-template-rows: auto 1fr;
   min-width: 0;
   overflow: visible;
   background: #fff;
 }
 .investor-matrix-section h3 {
   margin: 0;
-  padding: 0 0 10px;
+  padding: 0 0 8px;
   color: #9a541f;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
 }
 .investor-table-wrap { overflow-x: auto; }
@@ -768,11 +778,11 @@ svg { display: block; }
 }
 .investor-table th,
 .investor-table td {
-  padding: 11px 4px;
+  padding: 9px 12px;
   border-bottom: 1px solid #f3f3f3;
   text-align: right;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .investor-table th:first-child,
@@ -787,7 +797,7 @@ svg { display: block; }
   font-weight: 900;
 }
 .investor-table th:first-child,
-.investor-table td:first-child { width: 34%; }
+.investor-table td:first-child { width: 32%; }
 .investor-table tr:last-child td { border-bottom: 0; }
 .flow-matrix-value {
   color: var(--ink);
