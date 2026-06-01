@@ -734,7 +734,7 @@ svg { display: block; }
 .flows-block .flow-item:nth-child(2n) { border-right: 0; }
 .flows-block .flow-name { font-size: 11px; }
 .flows-block .flow-value { font-size: 13px; }
-.investor-card { grid-column: auto; }
+.investor-card { grid-column: 2; }
 .investor-matrix-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1025,6 +1025,7 @@ svg { display: block; }
   .brief-board { grid-template-columns: 1fr; }
   .chart-deck { grid-template-columns: 1fr; }
   .report-grid { grid-template-columns: 1fr; }
+  .investor-card { grid-column: 1; }
   .flows-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .flow-item:nth-child(2n) { border-right: 0; }
 }
