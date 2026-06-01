@@ -46,12 +46,33 @@ const CATEGORY_META = [
     label: '금리·크레딧',
     eyebrow: 'Rates & Credit',
     categories: ['domestic_rates', 'global_rates', 'credit'],
+    metricKeys: [
+      'cd_91d',
+      'monetary_stab_1y',
+      'monetary_stab_2y',
+      'kr_gov_3y',
+      'kr_gov_5y',
+      'kr_gov_10y',
+      'bank_aaa_3m',
+      'bank_aaa_1y',
+      'bank_aaa_2y',
+      'bank_aaa_3y',
+      'bank_aaa_5y',
+      'kr_corp_aa0_1y',
+      'kr_corp_aa0_3y',
+      'other_fin_aa_minus_2y',
+      'us_treasury_2y',
+      'us_treasury_10y',
+      'us_treasury_30y',
+      'germany_bund_10y',
+      'japan_gov_10y',
+    ],
     sparkMetric: null,
     tone: 'blue',
   },
   {
     key: 'equities',
-    label: '주식·투자자',
+    label: '주식·암호화폐',
     eyebrow: 'Equities',
     categories: ['domestic_equities_fx', 'global_equities', 'crypto'],
     sparkMetric: null,
@@ -141,9 +162,9 @@ const METRIC_ORDER = [
   'nikkei225',
   'hangseng_h',
   'dax',
-  'dollar_index',
   'usdjpy',
   'eurusd',
+  'dollar_index',
   'btc_usd',
   'eth_usd',
   'wti',
@@ -1079,18 +1100,18 @@ function renderInvestorFlowsCard(category, items) {
 
   const sections = [
     {
+      title: '채권',
+      rows: [
+        ['국채선물 3년', 'fut_kr3y_foreign', 'fut_kr3y_inst', 'fut_kr3y_individual'],
+        ['국채선물 10년', 'fut_kr10y_foreign', 'fut_kr10y_inst', 'fut_kr10y_individual'],
+      ],
+    },
+    {
       title: '주식',
       rows: [
         ['KOSPI', 'stock_kospi_foreign', 'stock_kospi_inst', 'stock_kospi_individual'],
         ['KOSDAQ', 'stock_kosdaq_foreign', 'stock_kosdaq_inst', 'stock_kosdaq_individual'],
         ['KOSPI200 선물', 'fut_kospi200_foreign', 'fut_kospi200_inst', 'fut_kospi200_individual'],
-      ],
-    },
-    {
-      title: '채권',
-      rows: [
-        ['국채선물 3년', 'fut_kr3y_foreign', 'fut_kr3y_inst', 'fut_kr3y_individual'],
-        ['국채선물 10년', 'fut_kr10y_foreign', 'fut_kr10y_inst', 'fut_kr10y_individual'],
       ],
     },
   ];

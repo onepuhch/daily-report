@@ -1,5 +1,18 @@
 # Daily Report Handoff
 
+## 2026-06-01 report-v2 ordering and Render write mode
+
+- User reviewed `2026-05-29` on Render and requested report-v2 layout fixes.
+- Updated `src/daily_report/report_v2/app.js`:
+  - Rates card now shows the PNG-visible domestic bond rows in PNG order:
+    `CD 91D`, 통안채 1Y/2Y, 국고채 3Y/5Y/10Y, 은행채 3M/1Y/2Y/3Y/5Y, 회사채 1Y/3Y, 기타금융채 2Y.
+  - DB-only helper metrics such as 국고채 2Y/30Y and `credit_spread_aa0_2y` remain in DB/history but are no longer shown in the main rates table.
+  - Renamed the equities card from `주식·투자자` to `주식·암호화폐`.
+  - Investor-flow card is separate and ordered left/right as 채권 then 주식.
+  - FX ordering now puts `달러인덱스` below `달러/엔` and `유로/달러`.
+- Verified `2026-05-29` DB observations have no duplicated metric keys and 15 investor-flow rows.
+- Render publish failed because `render.yaml` set `DAILY_REPORT_READ_ONLY=true`; changed it to `false` so Admin publish/save actions are allowed after deploy.
+
 ## 2026-05-29 PNG visible metric coverage
 
 User requirement clarified: every numeric row visible in the monthly PNG report tables should be represented in the DB and public report UI, excluding the yellow comment box text.

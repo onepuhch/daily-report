@@ -10,7 +10,7 @@ services:
       - key: DAILY_REPORT_ADMIN_HOST
         value: 0.0.0.0
       - key: DAILY_REPORT_READ_ONLY
-        value: true
+        value: false
       - key: DAILY_REPORT_AI_PROVIDER
         value: rule_based
       - key: REPORT_TIMEZONE
