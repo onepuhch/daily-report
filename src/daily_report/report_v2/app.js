@@ -1021,16 +1021,40 @@ function categoryItems(observations, category) {
 
 function renderGrid(report) {
   const observations = report.observations || [];
+  const renderedCards = [];
 
   dom.reportGrid.innerHTML = '';
   for (const category of CATEGORY_META) {
     const items = categoryItems(observations, category);
     if (!items.length && category.optional) continue;
-    dom.reportGrid.appendChild(
-      category.key === 'investor_flows'
+    renderedCards.push({
+      key: category.key,
+      card: category.key === 'investor_flows'
         ? renderInvestorFlowsCard(category, items)
         : renderMetricsCard(category, items),
-    );
+    });
+  }
+
+  const cardByKey = new Map(renderedCards.map((entry) => [entry.key, entry.card]));
+  const ratesCard = cardByKey.get('rates_credit');
+  const equitiesCard = cardByKey.get('equities');
+  const investorCard = cardByKey.get('investor_flows');
+
+  if (ratesCard && equitiesCard) {
+    dom.reportGrid.appendChild(ratesCard);
+
+    const rightStack = document.createElement('div');
+    rightStack.className = 'market-right-stack';
+    rightStack.appendChild(equitiesCard);
+    if (investorCard) rightStack.appendChild(investorCard);
+    dom.reportGrid.appendChild(rightStack);
+
+    for (const { key, card } of renderedCards) {
+      if (['rates_credit', 'equities', 'investor_flows'].includes(key)) continue;
+      dom.reportGrid.appendChild(card);
+    }
+  } else {
+    for (const { card } of renderedCards) dom.reportGrid.appendChild(card);
   }
 
   requestAnimationFrame(() => initSparklines(report));
@@ -1120,7 +1144,14 @@ function renderInvestorFlowsCard(category, items) {
     if (!item) return '<td class="flow-matrix-empty">-</td>';
     const value = Number(item.value);
     const direction = value >= 0 ? 'buy' : 'sell';
-    return `<td class="flow-matrix-value ${direction}">${esc(changeText(value, item.unit || ''))}</td>`;
+    const abs = Math.abs(value);
+    const digits = abs >= 1000 ? 0 : 1;
+    const sign = value > 0 ? '+' : '';
+    const text = Number.isFinite(value) ? `${sign}${value.toLocaleString('ko-KR', {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: 0,
+    })}${item.unit || ''}` : '-';
+    return `<td class="flow-matrix-value ${direction}">${esc(text)}</td>`;
   };
 
   card.innerHTML = `

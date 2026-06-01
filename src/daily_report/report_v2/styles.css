@@ -734,11 +734,17 @@ svg { display: block; }
 .flows-block .flow-item:nth-child(2n) { border-right: 0; }
 .flows-block .flow-name { font-size: 11px; }
 .flows-block .flow-value { font-size: 13px; }
-.investor-card { grid-column: 2; }
+.market-right-stack {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.market-right-stack .category-card { width: 100%; }
+.investor-card { grid-column: auto; }
 .investor-matrix-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 18px;
   padding: 18px 22px 22px;
 }
 .investor-matrix-section {
@@ -756,16 +762,17 @@ svg { display: block; }
 .investor-table-wrap { overflow-x: auto; }
 .investor-table {
   width: 100%;
-  min-width: 480px;
+  min-width: 0;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 .investor-table th,
 .investor-table td {
-  padding: 12px 14px;
+  padding: 11px 4px;
   border-bottom: 1px solid #f3f3f3;
   text-align: right;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 .investor-table th:first-child,
@@ -779,6 +786,8 @@ svg { display: block; }
   background: #fcfcfc;
   font-weight: 900;
 }
+.investor-table th:first-child,
+.investor-table td:first-child { width: 34%; }
 .investor-table tr:last-child td { border-bottom: 0; }
 .flow-matrix-value {
   color: var(--ink);
@@ -1025,7 +1034,7 @@ svg { display: block; }
   .brief-board { grid-template-columns: 1fr; }
   .chart-deck { grid-template-columns: 1fr; }
   .report-grid { grid-template-columns: 1fr; }
-  .investor-card { grid-column: 1; }
+  .investor-card { grid-column: auto; }
   .flows-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .flow-item:nth-child(2n) { border-right: 0; }
 }
