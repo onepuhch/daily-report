@@ -61,6 +61,17 @@ function isTruthy(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 }
 
+function isPathInside(parent, target) {
+  const relative = path.relative(parent, target);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function staticCacheControl(extension) {
+  if (extension === '.html') return 'no-store';
+  if (['.css', '.js', '.svg'].includes(extension)) return 'public, max-age=3600';
+  return 'no-store';
+}
+
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(String(left || ''));
   const rightBuffer = Buffer.from(String(right || ''));
@@ -2688,10 +2699,10 @@ async function serveStatic(res, requestPath) {
   }
 
   const resolved = path.resolve(filePath);
-  const allowedAdmin = resolved.startsWith(__dirname);
-  const allowedReport = resolved.startsWith(reportDir);
-  const allowedReportV2 = resolved.startsWith(reportV2Dir);
-  const allowedOutput = resolved.startsWith(outputDir);
+  const allowedAdmin = isPathInside(__dirname, resolved);
+  const allowedReport = isPathInside(reportDir, resolved);
+  const allowedReportV2 = isPathInside(reportV2Dir, resolved);
+  const allowedOutput = isPathInside(outputDir, resolved);
 
   if (!allowedAdmin && !allowedReport && !allowedReportV2 && !allowedOutput) {
     sendText(res, 403, 'Forbidden');
@@ -2702,7 +2713,7 @@ async function serveStatic(res, requestPath) {
     await stat(resolved);
     const extension = path.extname(resolved).toLowerCase();
     const type = mimeTypes.get(extension) || 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+    res.writeHead(200, { 'content-type': type, 'cache-control': staticCacheControl(extension) });
     createReadStream(resolved).pipe(res);
     return true;
   } catch (error) {
@@ -2851,7 +2862,7 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     const statusCode = error.statusCode || 500;
     sendJson(res, statusCode, {
-      error: error.message || 'Unexpected server error',
+      error: statusCode >= 500 ? 'Unexpected server error' : (error.message || 'Request failed'),
     });
   }
 });

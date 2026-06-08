@@ -1060,15 +1060,6 @@ function renderGrid(report) {
   requestAnimationFrame(() => initSparklines(report));
 }
 
-function computeSignal(items) {
-  const changes = items.map((item) => Number(item.change_1d)).filter(Number.isFinite);
-  if (!changes.length) return { cls: 'flat', label: '중립' };
-  const positive = changes.filter((value) => value > 0).length;
-  const negative = changes.filter((value) => value < 0).length;
-  if (positive > negative && positive >= changes.length * 0.6) return { cls: 'up', label: '상승 우위' };
-  if (negative > positive && negative >= changes.length * 0.6) return { cls: 'down', label: '하락 우위' };
-  return { cls: 'flat', label: '혼조' };
-}
 
 function renderMetricsCard(category, items) {
   const card = document.createElement('section');
@@ -1099,7 +1090,7 @@ function renderMetricsCard(category, items) {
           ${tableGroups.map((group) => `
             ${multiGroup ? `<tr class="metric-group-row"><td colspan="4">${esc(group.label)}</td></tr>` : ''}
             ${group.items.map((item) => `<tr>
-              <td><div class="metric-name">${esc(item.metric_name)}</div><div class="metric-sub">${esc(item.metric_key || '')}</div></td>
+              <td><div class="metric-name">${esc(item.metric_name)}</div></td>
               <td><span class="metric-value">${fmtNum(item.value)}</span><span class="metric-unit">${esc(item.unit || '')}</span></td>
               <td>${formatChange(item.change_1d, item.change_1d_unit)}</td>
               <td>${formatChange(item.change_ytd, item.change_ytd_unit)}</td>
