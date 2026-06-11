@@ -2867,6 +2867,18 @@ const server = createServer(async (req, res) => {
   }
 });
 
+function checkStartupSafety() {
+  const isPublic = defaultHost === '0.0.0.0';
+  const isWritable = !isTruthy(process.env.DAILY_REPORT_READ_ONLY);
+  const hasAuth = Boolean(process.env.DAILY_REPORT_BASIC_AUTH_USER && process.env.DAILY_REPORT_BASIC_AUTH_PASSWORD);
+  if (isPublic && isWritable && !hasAuth) {
+    console.error('[SECURITY] Refusing to start: public binding (0.0.0.0) with write mode requires Basic Auth.');
+    console.error('[SECURITY] Set DAILY_REPORT_BASIC_AUTH_USER + DAILY_REPORT_BASIC_AUTH_PASSWORD, or set DAILY_REPORT_READ_ONLY=true.');
+    process.exit(1);
+  }
+}
+
+checkStartupSafety();
 server.listen(defaultPort, defaultHost, () => {
   const displayHost = defaultHost === '0.0.0.0' ? '127.0.0.1' : defaultHost;
   console.log(`Daily Report Admin: http://${displayHost}:${defaultPort}`);

@@ -246,76 +246,20 @@ function Get-SheetMetricRows {
 }
 
 function Get-MetricDefinitions {
-    $defs = @(
-        @{ Key="cd_91d"; Name="CD 91일"; Category="domestic_rates"; Sheet="CD금리"; Column="B"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_gov_2y"; Name="국고채 2년"; Category="domestic_rates"; Sheet="국내금리"; Column="B"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_gov_3y"; Name="국고채 3년"; Category="domestic_rates"; Sheet="국내금리"; Column="C"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_gov_5y"; Name="국고채 5년"; Category="domestic_rates"; Sheet="국내금리"; Column="D"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_gov_10y"; Name="국고채 10년"; Category="domestic_rates"; Sheet="국내금리"; Column="E"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_gov_30y"; Name="국고채 30년"; Category="domestic_rates"; Sheet="국내금리"; Column="G"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="monetary_stab_1y"; Name="통안채 1년"; Category="domestic_rates"; Sheet="국내금리"; Column="H"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="monetary_stab_2y"; Name="통안채 2년"; Category="domestic_rates"; Sheet="국내금리"; Column="I"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="bank_aaa_3m"; Name="은행채 AAA 3개월"; Category="domestic_rates"; Sheet="국내금리"; Column="P"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="bank_aaa_1y"; Name="은행채 AAA 1년"; Category="domestic_rates"; Sheet="국내금리"; Column="Q"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="bank_aaa_2y"; Name="은행채 AAA 2년"; Category="domestic_rates"; Sheet="국내금리"; Column="R"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="bank_aaa_3y"; Name="은행채 AAA 3년"; Category="domestic_rates"; Sheet="국내금리"; Column="S"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="bank_aaa_5y"; Name="은행채 AAA 5년"; Category="domestic_rates"; Sheet="국내금리"; Column="T"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_corp_aa0_1y"; Name="회사채 AA0 1년"; Category="domestic_rates"; Sheet="국내금리"; Column="V"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="kr_corp_aa0_3y"; Name="회사채 AA0 3년"; Category="domestic_rates"; Sheet="국내금리"; Column="X"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="other_fin_aa_minus_2y"; Name="기타금융채 AA- 2년"; Category="domestic_rates"; Sheet="국내금리"; Column="AC"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="credit_spread_aa0_2y"; Name="회사채 AA0 2년 스프레드"; Category="credit"; Sheet="크레딧SP"; Column="D"; Unit="bp"; ChangeMode="spread_bp"; ValueMultiplier=100 },
-
-        @{ Key="fut_kospi200_inst"; Name="KOSPI200 선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="B"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kospi200_foreign"; Name="KOSPI200 선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="C"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kospi200_individual"; Name="KOSPI200 선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="D"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr3y_inst"; Name="3년 국채선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="E"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr3y_foreign"; Name="3년 국채선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="F"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr3y_individual"; Name="3년 국채선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="G"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr10y_inst"; Name="10년 국채선물 기관 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="H"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr10y_foreign"; Name="10년 국채선물 외국인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="I"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="fut_kr10y_individual"; Name="10년 국채선물 개인 순매수"; Category="investor_flows"; Sheet="선물투자자별순매수금액"; Column="J"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.00000001 },
-        @{ Key="stock_kospi_inst"; Name="KOSPI 기관 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="B"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-        @{ Key="stock_kospi_foreign"; Name="KOSPI 외국인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="C"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-        @{ Key="stock_kospi_individual"; Name="KOSPI 개인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="D"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-        @{ Key="stock_kosdaq_inst"; Name="KOSDAQ 기관 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="E"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-        @{ Key="stock_kosdaq_foreign"; Name="KOSDAQ 외국인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="F"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-        @{ Key="stock_kosdaq_individual"; Name="KOSDAQ 개인 순매수"; Category="investor_flows"; Sheet="주식투자자별순매수금액"; Column="G"; Unit="억원"; ChangeMode="flow_abs"; ValueMultiplier=0.01 },
-
-        @{ Key="us_treasury_2y"; Name="미국채 2년"; Category="global_rates"; Sheet="해외금리"; Column="B"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="us_treasury_10y"; Name="미국채 10년"; Category="global_rates"; Sheet="해외금리"; Column="C"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="us_treasury_30y"; Name="미국채 30년"; Category="global_rates"; Sheet="해외금리"; Column="D"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="germany_bund_10y"; Name="독일 국채 10년"; Category="global_rates"; Sheet="해외금리"; Column="E"; Unit="%"; ChangeMode="rate_bp" },
-        @{ Key="japan_gov_10y"; Name="일본 국채 10년"; Category="global_rates"; Sheet="해외금리"; Column="F"; Unit="%"; ChangeMode="rate_bp" },
-
-        @{ Key="kospi"; Name="KOSPI"; Category="domestic_equities_fx"; Sheet="국내주식및환율"; Column="B"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="kospi200"; Name="KOSPI200"; Category="domestic_equities_fx"; Sheet="국내주식및환율"; Column="C"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="kosdaq"; Name="KOSDAQ"; Category="domestic_equities_fx"; Sheet="국내주식및환율"; Column="D"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="usdkrw"; Name="원/달러"; Category="fx"; Sheet="국내주식및환율"; Column="E"; Unit="KRW"; ChangeMode="pct" },
-
-        @{ Key="dow"; Name="다우 산업"; Category="global_equities"; Sheet="해외주식"; Column="B"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="sp500"; Name="S&P 500"; Category="global_equities"; Sheet="해외주식"; Column="C"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="nasdaq"; Name="나스닥 종합"; Category="global_equities"; Sheet="해외주식"; Column="D"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="dax"; Name="독일 DAX"; Category="global_equities"; Sheet="해외주식"; Column="E"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="nikkei225"; Name="니케이 225"; Category="global_equities"; Sheet="아시아주식"; Column="B"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="hangseng_h"; Name="항셍 H"; Category="global_equities"; Sheet="아시아주식"; Column="C"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="shanghai_comp"; Name="상해종합"; Category="global_equities"; Sheet="아시아주식"; Column="D"; Unit="pt"; ChangeMode="pct" },
-
-        @{ Key="dollar_index"; Name="달러인덱스"; Category="fx"; Sheet="해외환율"; Column="B"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="usdjpy"; Name="달러/엔"; Category="fx"; Sheet="해외환율"; Column="C"; Unit="JPY"; ChangeMode="pct" },
-        @{ Key="eurusd"; Name="유로/달러"; Category="fx"; Sheet="해외환율"; Column="D"; Unit="USD"; ChangeMode="pct" },
-
-        @{ Key="btc_usd"; Name="BTC"; Category="crypto"; Sheet="암호화폐"; Column="B"; Unit="USD"; ChangeMode="pct" },
-        @{ Key="eth_usd"; Name="ETH"; Category="crypto"; Sheet="암호화폐"; Column="C"; Unit="USD"; ChangeMode="pct" },
-
-        @{ Key="wti"; Name="WTI"; Category="commodities"; Sheet="상품"; Column="B"; Unit="USD"; ChangeMode="pct" },
-        @{ Key="brent"; Name="브렌트유"; Category="commodities"; Sheet="상품"; Column="C"; Unit="USD"; ChangeMode="pct" },
-        @{ Key="gold"; Name="금"; Category="commodities"; Sheet="상품"; Column="D"; Unit="USD"; ChangeMode="pct" },
-        @{ Key="silver"; Name="은"; Category="commodities"; Sheet="상품"; Column="E"; Unit="USD"; ChangeMode="pct" },
-        @{ Key="sox"; Name="필라델피아 반도체"; Category="commodities"; Sheet="상품"; Column="F"; Unit="pt"; ChangeMode="pct" },
-        @{ Key="copper"; Name="구리"; Category="commodities"; Sheet="상품"; Column="G"; Unit="USD"; ChangeMode="pct" }
-    )
-
-    return $defs | ForEach-Object { [pscustomobject]$_ }
+    $defsPath = Join-Path $PSScriptRoot "metric_definitions.json"
+    $raw = Get-Content -LiteralPath $defsPath -Encoding UTF8 -Raw | ConvertFrom-Json
+    return $raw | ForEach-Object {
+        [pscustomobject]@{
+            Key             = $_.key
+            Name            = $_.name
+            Category        = $_.category
+            Sheet           = $_.sheet
+            Column          = $_.column
+            Unit            = $_.unit
+            ChangeMode      = $_.change_mode
+            ValueMultiplier = if ($null -eq $_.value_multiplier) { 1.0 } else { [double]$_.value_multiplier }
+        }
+    }
 }
 
 function Get-DisplayCategory {

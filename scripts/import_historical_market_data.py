@@ -26,67 +26,14 @@ class MetricDef:
     value_multiplier: float = 1.0
 
 
-METRICS = [
-    MetricDef("cd_91d", "CD 91일", "domestic_rates", "CD금리", "B", "%", "rate_bp"),
-    MetricDef("kr_gov_2y", "국고채 2년", "domestic_rates", "국내금리", "B", "%", "rate_bp"),
-    MetricDef("kr_gov_3y", "국고채 3년", "domestic_rates", "국내금리", "C", "%", "rate_bp"),
-    MetricDef("kr_gov_5y", "국고채 5년", "domestic_rates", "국내금리", "D", "%", "rate_bp"),
-    MetricDef("kr_gov_10y", "국고채 10년", "domestic_rates", "국내금리", "E", "%", "rate_bp"),
-    MetricDef("kr_gov_30y", "국고채 30년", "domestic_rates", "국내금리", "G", "%", "rate_bp"),
-    MetricDef("monetary_stab_1y", "통안채 1년", "domestic_rates", "국내금리", "H", "%", "rate_bp"),
-    MetricDef("monetary_stab_2y", "통안채 2년", "domestic_rates", "국내금리", "I", "%", "rate_bp"),
-    MetricDef("bank_aaa_3m", "은행채 AAA 3개월", "domestic_rates", "국내금리", "P", "%", "rate_bp"),
-    MetricDef("bank_aaa_1y", "은행채 AAA 1년", "domestic_rates", "국내금리", "Q", "%", "rate_bp"),
-    MetricDef("bank_aaa_2y", "은행채 AAA 2년", "domestic_rates", "국내금리", "R", "%", "rate_bp"),
-    MetricDef("bank_aaa_3y", "은행채 AAA 3년", "domestic_rates", "국내금리", "S", "%", "rate_bp"),
-    MetricDef("bank_aaa_5y", "은행채 AAA 5년", "domestic_rates", "국내금리", "T", "%", "rate_bp"),
-    MetricDef("kr_corp_aa0_1y", "회사채 AA0 1년", "domestic_rates", "국내금리", "V", "%", "rate_bp"),
-    MetricDef("kr_corp_aa0_3y", "회사채 AA0 3년", "domestic_rates", "국내금리", "X", "%", "rate_bp"),
-    MetricDef("other_fin_aa_minus_2y", "기타금융채 AA- 2년", "domestic_rates", "국내금리", "AC", "%", "rate_bp"),
-    MetricDef("credit_spread_aa0_2y", "회사채 AA0 2년 스프레드", "credit", "크레딧SP", "D", "bp", "spread_bp", 100.0),
-    MetricDef("fut_kospi200_inst", "KOSPI200 선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "B", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kospi200_foreign", "KOSPI200 선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "C", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kospi200_individual", "KOSPI200 선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "D", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr3y_inst", "3년 국채선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "E", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr3y_foreign", "3년 국채선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "F", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr3y_individual", "3년 국채선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "G", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr10y_inst", "10년 국채선물 기관 순매수", "investor_flows", "선물투자자별순매수금액", "H", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr10y_foreign", "10년 국채선물 외국인 순매수", "investor_flows", "선물투자자별순매수금액", "I", "억원", "flow_abs", 0.00000001),
-    MetricDef("fut_kr10y_individual", "10년 국채선물 개인 순매수", "investor_flows", "선물투자자별순매수금액", "J", "억원", "flow_abs", 0.00000001),
-    MetricDef("stock_kospi_inst", "KOSPI 기관 순매수", "investor_flows", "주식투자자별순매수금액", "B", "억원", "flow_abs", 0.01),
-    MetricDef("stock_kospi_foreign", "KOSPI 외국인 순매수", "investor_flows", "주식투자자별순매수금액", "C", "억원", "flow_abs", 0.01),
-    MetricDef("stock_kospi_individual", "KOSPI 개인 순매수", "investor_flows", "주식투자자별순매수금액", "D", "억원", "flow_abs", 0.01),
-    MetricDef("stock_kosdaq_inst", "KOSDAQ 기관 순매수", "investor_flows", "주식투자자별순매수금액", "E", "억원", "flow_abs", 0.01),
-    MetricDef("stock_kosdaq_foreign", "KOSDAQ 외국인 순매수", "investor_flows", "주식투자자별순매수금액", "F", "억원", "flow_abs", 0.01),
-    MetricDef("stock_kosdaq_individual", "KOSDAQ 개인 순매수", "investor_flows", "주식투자자별순매수금액", "G", "억원", "flow_abs", 0.01),
-    MetricDef("us_treasury_2y", "미국채 2년", "global_rates", "해외금리", "B", "%", "rate_bp"),
-    MetricDef("us_treasury_10y", "미국채 10년", "global_rates", "해외금리", "C", "%", "rate_bp"),
-    MetricDef("us_treasury_30y", "미국채 30년", "global_rates", "해외금리", "D", "%", "rate_bp"),
-    MetricDef("germany_bund_10y", "독일 국채 10년", "global_rates", "해외금리", "E", "%", "rate_bp"),
-    MetricDef("japan_gov_10y", "일본 국채 10년", "global_rates", "해외금리", "F", "%", "rate_bp"),
-    MetricDef("kospi", "KOSPI", "domestic_equities_fx", "국내주식및환율", "B", "pt", "pct"),
-    MetricDef("kospi200", "KOSPI200", "domestic_equities_fx", "국내주식및환율", "C", "pt", "pct"),
-    MetricDef("kosdaq", "KOSDAQ", "domestic_equities_fx", "국내주식및환율", "D", "pt", "pct"),
-    MetricDef("usdkrw", "원/달러", "fx", "국내주식및환율", "E", "KRW", "pct"),
-    MetricDef("dow", "다우 산업", "global_equities", "해외주식", "B", "pt", "pct"),
-    MetricDef("sp500", "S&P 500", "global_equities", "해외주식", "C", "pt", "pct"),
-    MetricDef("nasdaq", "나스닥 종합", "global_equities", "해외주식", "D", "pt", "pct"),
-    MetricDef("dax", "독일 DAX", "global_equities", "해외주식", "E", "pt", "pct"),
-    MetricDef("nikkei225", "니케이 225", "global_equities", "아시아주식", "B", "pt", "pct"),
-    MetricDef("hangseng_h", "항셍 H", "global_equities", "아시아주식", "C", "pt", "pct"),
-    MetricDef("shanghai_comp", "상해종합", "global_equities", "아시아주식", "D", "pt", "pct"),
-    MetricDef("dollar_index", "달러인덱스", "fx", "해외환율", "B", "pt", "pct"),
-    MetricDef("usdjpy", "달러/엔", "fx", "해외환율", "C", "JPY", "pct"),
-    MetricDef("eurusd", "유로/달러", "fx", "해외환율", "D", "USD", "pct"),
-    MetricDef("btc_usd", "BTC", "crypto", "암호화폐", "B", "USD", "pct"),
-    MetricDef("eth_usd", "ETH", "crypto", "암호화폐", "C", "USD", "pct"),
-    MetricDef("wti", "WTI", "commodities", "상품", "B", "USD", "pct"),
-    MetricDef("brent", "브렌트유", "commodities", "상품", "C", "USD", "pct"),
-    MetricDef("gold", "금", "commodities", "상품", "D", "USD", "pct"),
-    MetricDef("silver", "은", "commodities", "상품", "E", "USD", "pct"),
-    MetricDef("sox", "필라델피아 반도체", "commodities", "상품", "F", "pt", "pct"),
-    MetricDef("copper", "구리", "commodities", "상품", "G", "USD", "pct"),
-]
+def _load_metrics() -> list["MetricDef"]:
+    defs_path = Path(__file__).resolve().parent / "metric_definitions.json"
+    with open(defs_path, encoding="utf-8") as f:
+        raw: list[dict] = json.load(f)
+    return [MetricDef(**d) for d in raw]
+
+
+METRICS = _load_metrics()
 
 CATEGORY_LABELS = {
     "domestic_rates": "국내금리",
