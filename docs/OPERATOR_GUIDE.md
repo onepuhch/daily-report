@@ -91,24 +91,6 @@ DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID=123456789
 - 두 값이 비어 있으면 알림 없이 기존과 동일하게 동작합니다 (로그에 skip 한 줄만 남음).
 - 알림 전송 자체가 실패해도 배치 처리에는 영향이 없습니다.
 
-## 경제지표 캘린더 월간 갱신
-
-`economic_events` 테이블은 자동 수집이 아니므로 매월 말에 다음 달 일정을 넣어야 합니다. 비어 있으면 V2 캘린더가 다음 달에 빈 상태가 됩니다.
-
-매월 말 루틴:
-
-1. 다음 달 시드 파일 골격 생성:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\New-EconomicEventsSeed.ps1
-```
-
-   (기본값 = 다음 달. 특정 달은 `-Year 2026 -Month 8`처럼 지정)
-
-2. 생성된 `db\economic_events_seed_YYYY_MM.sql`의 TODO 예시 행을 실제 일정으로 교체합니다 (금통위, FOMC, CPI, 고용지표, 휴장일 등).
-3. Supabase SQL editor에서 해당 파일을 실행합니다. 같은 파일을 다시 실행해도 중복 없이 갱신됩니다 (`on conflict ... do update`).
-4. 파일을 커밋합니다.
-
 ## Admin 열기
 
 ```text

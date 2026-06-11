@@ -1,5 +1,17 @@
 # Daily Report Handoff
 
+## 2026-06-11 Collaborator-feature revert reconciliation (read this first)
+
+History decision record:
+
+- **2026-06-08**: User reviewed the features ported from the collaborator repo (`pllayer223-create/Daily-report`) and judged most of them duplicated/cluttered ("admin 페이지도 없고 중복 기능 덕지덕지"). Master was force-pushed back to `b40571f` plus one cleanup commit `b397774` (path-traversal fix `isPathInside`, 500-error message masking, static cache-control, removal of unused `@anthropic-ai/sdk`/`dotenv` deps).
+- **Dropped by the revert** (7 commits, `795d1f5`..`5645efb`): report-v2 dashboard tabs, ops dashboard cards, dark/light toggle, economic-events calendar (+ API route + `db/economic_events*.sql`), multi-metric Trend workspace, KRX/NYSE holiday badges, and the `da78f24` dead-code/UTC-date fixes. Their work-log entries were moved to `docs/HANDOFF_ARCHIVE.md`.
+- **2026-06-11**: This machine still had the pre-revert history; user confirmed the revert is canonical. Local audit-day commits were rebased onto `b397774` and the calendar-dependent pieces were removed again (see below). The UTC-prone `toISOString().slice(0,10)` date fallback in `report_v2/app.js` was re-fixed with a local-date helper because that bug fix was lost in the revert.
+
+Leftover to be aware of:
+
+- Supabase still has the `economic_events` table and June 2026 seed rows (user ran the SQL on 2026-06-05), but nothing in the product reads it anymore. Decide later: drop the table, or keep it for a future calendar reintroduction.
+
 ## 2026-06-11 Metric definition single source, startup guard, first automated tests
 
 Full-project audit follow-up. Implemented the remaining recommendations:
@@ -19,82 +31,12 @@ Validation:
 - `scripts\verify-pipeline.cmd` — all checks pass (latest `2026-06-08`, observations 59, KOSPI 299 points).
 - Python JSON-loading logic verified inline (59 `MetricDef` instances, unique keys).
 
-Same-day follow-up (agreed priority items, all done except 4):
+Same-day follow-up (agreed priority items):
 
 1. **Done** — Telegram failure alert: `Send-FailureAlert` in `Run-DailyMarketUpdate.ps1`, hooked into every `Record-JobRun -Status failed` path. Activates when `.env` has `DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN`/`CHAT_ID`; silently skips otherwise. Verified: parser OK, skip path OK, invalid-token send fails gracefully without breaking the batch. Setup steps in `docs/OPERATOR_GUIDE.md`.
-2. **Done** — Monthly `economic_events` seed routine: `scripts/New-EconomicEventsSeed.ps1` generates `db/economic_events_seed_YYYY_MM.sql` skeleton (defaults to next month). July 2026 skeleton generated; operator fills rows monthly per `docs/OPERATOR_GUIDE.md`.
-3. **Done** — HANDOFF.md archive split: May 2026 work logs moved to `docs/HANDOFF_ARCHIVE.md` (~1,200 lines). This file keeps June entries + the core 인수인계서 sections. 지금 바로 할 일/진행 현황/작업 일지 refreshed to current state (59 metrics, Render deployed).
+2. **Removed after the revert decision** — A monthly `economic_events` seed routine was built, then deleted the same day because the 06-08 revert removed the economic calendar from the product entirely.
+3. **Done** — HANDOFF.md archive split: May 2026 work logs moved to `docs/HANDOFF_ARCHIVE.md` (~1,200 lines). This file keeps the current entries + the core 인수인계서 sections. 지금 바로 할 일/진행 현황/작업 일지 refreshed to current state (59 metrics, Render deployed).
 4. **Pending** — Gradual module split of `server.mjs` / `report_v2/app.js` when next features land.
-
-## 2026-06-05 Report V2 operations, trends, and economic calendar
-
-Latest pushed commits:
-
-- `2b6d726 Add report v2 ops dashboard enhancements`
-- `8a9abf7 Add economic events API integration`
-- `da78f24 Fix report v2 dead dashboard code`
-
-User ran both Supabase SQL files:
-
-- `db/economic_events.sql`
-- `db/economic_events_seed_2026_06.sql`
-
-Confirmed locally that `GET /api/economic-events?date=2026-06-05&window=7` now returns `source: "supabase"` with the seeded June 2026 events. The Report V2 economic calendar can therefore read from DB; static fallback remains only as a safety path when Supabase/table/data is unavailable.
-
-Report V2 changes:
-
-- Added dark/light toggle, economic calendar, Trend statistics table, and multi-metric Trend Lab.
-- Removed the old overview `1M Trends` block so the new Trend Lab is the single trend comparison experience.
-- Trend Lab now opens with no default selected metrics.
-- Added `economic_events` API route in `src/daily_report/admin/server.mjs`.
-- Added `db/economic_events.sql` and `db/economic_events_seed_2026_06.sql`.
-- Restored the missing `opsStrip` DOM section so the six operations cards render below Daily Brief.
-- Removed dead `renderMarketCharts`, dead `renderDetailTrendCard`, and the discarded first render pass in `renderTrendWorkspace`.
-- Replaced the UTC-prone `new Date().toISOString().slice(0, 10)` fallback with a local-date utility to avoid Korea midnight date shifts.
-
-Validation completed:
-
-- `node --check src\daily_report\admin\server.mjs`
-- `node --check src\daily_report\report_v2\app.js`
-- Playwright screenshot confirmed six ops cards render on `/report-v2`.
-- Playwright screenshot confirmed the Trend Lab multi-metric comparison page still opens after cleanup.
-- Local API check confirmed economic calendar source is Supabase after seed SQL execution.
-
-Remaining operational work:
-
-- The seeded economic calendar data is only a June 2026 sample. For production use, add a regular import/update routine for real `economic_events` rows, or manually maintain the table.
-- Once the DB calendar is fully operational, consider removing the static frontend fallback to avoid stale sample events surfacing in future months.
-
-
-## 2026-06-04 Codex update - report-v2 trend/date UI
-
-- Reviewed `https://github.com/pllayer223-create/Daily-report` in `Daily-report-review`.
-  - Useful ideas confirmed: KRX/NYSE holiday/effective-date handling, date navigator market status, multi-metric Recharts-style comparison, report/research collection screen, and financial indicator pages.
-  - Did not port report collection or separate financial indicator pages yet.
-- Implemented in current repo:
-  - `/api/history` cap increased from 60 to 500 days for longer chart history.
-  - `/report-v2` date picker now shows KRX/NYSE open/closed badges and domestic/foreign effective dates when data date differs from report date.
-  - Overview's old three-card Trends block is removed/hidden.
-  - Trend tab now renders one large multi-metric comparison workspace with 1M/3M/All range controls, up to 8 selectable metrics, and left/right axis toggles.
-- Checks:
-  - `node --check src/daily_report/report_v2/app.js` passed.
-  - Local `/api/health` passed on `http://127.0.0.1:4173`.
-  - Overview screenshot checked at `data/report_v2_overview_check.png`; old Trends block is not shown.
-- Remaining:
-  - Browser click smoke for Trend tab was not automated because this repo does not include `@playwright/test`; the static Playwright screenshot CLI works, but it cannot click the tab.
-
-## 2026-06-01 report-v2 ordering and Render write mode
-
-- User reviewed `2026-05-29` on Render and requested report-v2 layout fixes.
-- Updated `src/daily_report/report_v2/app.js`:
-  - Rates card now shows the PNG-visible domestic bond rows in PNG order:
-    `CD 91D`, 통안채 1Y/2Y, 국고채 3Y/5Y/10Y, 은행채 3M/1Y/2Y/3Y/5Y, 회사채 1Y/3Y, 기타금융채 2Y.
-  - DB-only helper metrics such as 국고채 2Y/30Y and `credit_spread_aa0_2y` remain in DB/history but are no longer shown in the main rates table.
-  - Renamed the equities card from `주식·투자자` to `주식·암호화폐`.
-  - Investor-flow card is separate and ordered left/right as 채권 then 주식.
-  - FX ordering now puts `달러인덱스` below `달러/엔` and `유로/달러`.
-- Verified `2026-05-29` DB observations have no duplicated metric keys and 15 investor-flow rows.
-- Render publish failed because `render.yaml` set `DAILY_REPORT_READ_ONLY=true`; changed it to `false` so Admin publish/save actions are allowed after deploy.
 
 #  인수인계서 (이 파일 하나만 보면 됩니다)
 
@@ -205,7 +147,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 ## 지금 바로 할 일
 
 1. **Telegram 실패 알림 활성화** — 코드는 들어가 있다(`Run-DailyMarketUpdate.ps1`의 `Send-FailureAlert`). 운영자가 `.env`에 `DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN` / `DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID`를 채우면 끝. 절차는 `docs/OPERATOR_GUIDE.md`의 "자동 실행 실패 알림" 참조.
-2. **economic_events 월간 갱신 (매월 말)** — `scripts\New-EconomicEventsSeed.ps1` 실행 → 생성된 `db\economic_events_seed_YYYY_MM.sql`의 TODO를 실제 일정으로 교체 → Supabase SQL editor 실행 → 커밋. `db\economic_events_seed_2026_07.sql` 골격이 이미 생성되어 있으니 7월분부터 채우면 된다.
+2. **Supabase `economic_events` 테이블 처분 결정** — 2026-06-08 원복으로 경제 캘린더 UI/API가 제거됐지만 Supabase에는 테이블과 6월 시드 데이터가 남아 있다. 캘린더를 재도입할 계획이 없으면 SQL editor에서 `drop table public.economic_events;`로 정리, 재도입 예정이면 그대로 둔다.
 3. **needs_review 과거 코멘트 정리 (선택, 틈틈이)** — `data\historical_ocr\cleaned_comments\needs_review.json`의 항목을 `boxes\*.comment_box.png` 원본과 대조해 승인 폴더로 이동.
 4. **다음 기능 추가 시 모듈 분리 시작** — `server.mjs`(~98KB)는 라우트 단위, `report_v2/app.js`(~87KB)는 기능 단위로, 새 코드를 별도 모듈로 빼는 것부터 시작한다. 빅뱅 리팩토링은 하지 않는다.
 
@@ -229,7 +171,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 | 검증 gate | 작동 중 | pre-upload 검증 실패 시 업로드 차단, post-upload DB 검증, `job_runs` 기록. |
 | 자동화 로그 | 작동 중 | `job_runs` 기록, Admin 로그 보기 팝업, 실패 행 재실행. |
 | Admin | 작동 중 | 단일 report 화면(상태바 → 데이터 → 코멘트 → 발행) + 자동화 로그 뷰. Supabase 우선 조회. |
-| 공개 리포트 V2 | 작동 중 | 다크/라이트, 경제 캘린더(Supabase), Trend Lab, ops 카드. Render 데모 배포 완료(Basic Auth + startup 가드). |
+| 공개 리포트 V2 | 작동 중 | 2x2 카드 + 투자자 동향 + 날짜 달력 팝오버 구성(2026-06-08 원복 후 기준). Render 데모 배포 완료(Basic Auth + startup 가드 + 정적 서빙 경로 검증). |
 | 과거 데이터 백필 | 1회 완료 | PNG OCR 코멘트/투자자 동향 백필 완료. `needs_review` 코멘트 정리만 남음. |
 | AI/뉴스/챗봇 | 보류 | rule_based provider + `AI_CONTEXT_CONTRACT.md` 경계 유지. provider-backed LLM은 D-017 비교 후 연결. |
 
@@ -384,17 +326,14 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 
 > 그 이전 history는 `docs/HANDOFF_ARCHIVE.md`와 `git log`로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
 
-### 2026-06-11 — Claude — 전체 감사 후속 (매핑 단일화/startup 가드/테스트/실패 알림/아카이브)
-`scripts/metric_definitions.json` 단일 진실 소스화(Python/PS1 양쪽 로드), `server.mjs` fail-closed startup 가드, 첫 자동 테스트 7건(`npm test`), `Run-DailyMarketUpdate.ps1` Telegram 실패 알림(.env 설정 시 활성화), `New-EconomicEventsSeed.ps1` 월간 시드 골격 생성기, HANDOFF.md 5월 일지를 `docs/HANDOFF_ARCHIVE.md`로 분리. 검증: npm test 7/7, verify-pipeline 전 항목 통과(latest 2026-06-08, obs 59).
+### 2026-06-11 — Claude — 원복 정합화 + 전체 감사 후속 (매핑 단일화/startup 가드/테스트/실패 알림/아카이브)
+로컬에 남아있던 원복 이전 히스토리를 원격(`b397774`) 기준으로 rebase. `scripts/metric_definitions.json` 단일 진실 소스화(Python/PS1 양쪽 로드), `server.mjs` fail-closed startup 가드, 첫 자동 테스트 7건(`npm test`), `Run-DailyMarketUpdate.ps1` Telegram 실패 알림(.env 설정 시 활성화), HANDOFF.md 과거 일지를 `docs/HANDOFF_ARCHIVE.md`로 분리, 원복으로 되살아난 UTC 날짜 버그 재수정. 검증: npm test 7/7, verify-pipeline 통과.
 
-### 2026-06-05 — Claude — V2 운영/트렌드/경제 캘린더 + dead code 정리
-다크/라이트 토글, 경제 캘린더(`economic_events` 테이블+시드, Supabase 소스 확인), Trend Lab 단일화, `opsStrip` DOM 복원, dead render 함수 제거, UTC 날짜 버그 수정. 상세는 상단 2026-06-05 섹션.
+### 2026-06-08 — 사용자 — 협업자 기능 원복 + 보안 정리 (b397774)
+협업 repo에서 들여온 기능 7커밋(탭/ops 카드/다크모드/경제 캘린더/Trend 워크스페이스/KRX 배지)을 force-push로 제거. 같은 커밋에서 path traversal 수정(`isPathInside`), 500 에러 메시지 마스킹, 정적 캐시 헤더, 미사용 의존성 제거. 폐기된 작업 일지는 `docs/HANDOFF_ARCHIVE.md` 참조.
 
-### 2026-06-04 — Codex — V2 트렌드/날짜 UI
-KRX/NYSE 휴장 배지+국내외 기준일 표시, `/api/history` 500일 확장, Trend 탭 멀티지표 비교 워크스페이스(1M/3M/All, 최대 8지표, 좌우축).
-
-### 2026-06-01 — V2 정렬/Render write mode
-금리 카드 PNG 순서 정렬, 주식·암호화폐 카드명 변경, FX 순서 조정, `render.yaml` `DAILY_REPORT_READ_ONLY=false`로 전환(발행 허용).
+### 2026-06-01 — V2 정렬/Render write mode (일부 원복됨)
+`render.yaml` `DAILY_REPORT_READ_ONLY=false` 전환(발행 허용)은 유지. report-v2 정렬 변경은 06-08 원복으로 제거됨.
 
 ### 2026-05-29 — PNG 커버리지/투자자 동향 백필/Infomax 복구
 PNG 가시 지표 전수(59개) 매핑 완료+재업로드(242 리포트/11,032 obs), 투자자 동향 PNG 백필 1,182건, Infomax stale 세션 자동 복구 재시도 추가. 상세는 `docs/HANDOFF_ARCHIVE.md`.

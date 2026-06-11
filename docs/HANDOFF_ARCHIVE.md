@@ -5,6 +5,83 @@
 
 ---
 
+---
+
+# 2026-06-01 ~ 2026-06-05 작업 일지 (2026-06-08 원복으로 폐기된 작업)
+
+아래 작업들은 2026-06-08 force-push 원복(40571f + 397774)으로 제품에서 제거됐다. 기록용 원본.
+
+## 2026-06-05 Report V2 operations, trends, and economic calendar
+
+Latest pushed commits:
+
+- `2b6d726 Add report v2 ops dashboard enhancements`
+- `8a9abf7 Add economic events API integration`
+- `da78f24 Fix report v2 dead dashboard code`
+
+User ran both Supabase SQL files:
+
+- `db/economic_events.sql`
+- `db/economic_events_seed_2026_06.sql`
+
+Confirmed locally that `GET /api/economic-events?date=2026-06-05&window=7` now returns `source: "supabase"` with the seeded June 2026 events. The Report V2 economic calendar can therefore read from DB; static fallback remains only as a safety path when Supabase/table/data is unavailable.
+
+Report V2 changes:
+
+- Added dark/light toggle, economic calendar, Trend statistics table, and multi-metric Trend Lab.
+- Removed the old overview `1M Trends` block so the new Trend Lab is the single trend comparison experience.
+- Trend Lab now opens with no default selected metrics.
+- Added `economic_events` API route in `src/daily_report/admin/server.mjs`.
+- Added `db/economic_events.sql` and `db/economic_events_seed_2026_06.sql`.
+- Restored the missing `opsStrip` DOM section so the six operations cards render below Daily Brief.
+- Removed dead `renderMarketCharts`, dead `renderDetailTrendCard`, and the discarded first render pass in `renderTrendWorkspace`.
+- Replaced the UTC-prone `new Date().toISOString().slice(0, 10)` fallback with a local-date utility to avoid Korea midnight date shifts.
+
+Validation completed:
+
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\report_v2\app.js`
+- Playwright screenshot confirmed six ops cards render on `/report-v2`.
+- Playwright screenshot confirmed the Trend Lab multi-metric comparison page still opens after cleanup.
+- Local API check confirmed economic calendar source is Supabase after seed SQL execution.
+
+Remaining operational work:
+
+- The seeded economic calendar data is only a June 2026 sample. For production use, add a regular import/update routine for real `economic_events` rows, or manually maintain the table.
+- Once the DB calendar is fully operational, consider removing the static frontend fallback to avoid stale sample events surfacing in future months.
+
+
+## 2026-06-04 Codex update - report-v2 trend/date UI
+
+- Reviewed `https://github.com/pllayer223-create/Daily-report` in `Daily-report-review`.
+  - Useful ideas confirmed: KRX/NYSE holiday/effective-date handling, date navigator market status, multi-metric Recharts-style comparison, report/research collection screen, and financial indicator pages.
+  - Did not port report collection or separate financial indicator pages yet.
+- Implemented in current repo:
+  - `/api/history` cap increased from 60 to 500 days for longer chart history.
+  - `/report-v2` date picker now shows KRX/NYSE open/closed badges and domestic/foreign effective dates when data date differs from report date.
+  - Overview's old three-card Trends block is removed/hidden.
+  - Trend tab now renders one large multi-metric comparison workspace with 1M/3M/All range controls, up to 8 selectable metrics, and left/right axis toggles.
+- Checks:
+  - `node --check src/daily_report/report_v2/app.js` passed.
+  - Local `/api/health` passed on `http://127.0.0.1:4173`.
+  - Overview screenshot checked at `data/report_v2_overview_check.png`; old Trends block is not shown.
+- Remaining:
+  - Browser click smoke for Trend tab was not automated because this repo does not include `@playwright/test`; the static Playwright screenshot CLI works, but it cannot click the tab.
+
+## 2026-06-01 report-v2 ordering and Render write mode
+
+- User reviewed `2026-05-29` on Render and requested report-v2 layout fixes.
+- Updated `src/daily_report/report_v2/app.js`:
+  - Rates card now shows the PNG-visible domestic bond rows in PNG order:
+    `CD 91D`, 통안채 1Y/2Y, 국고채 3Y/5Y/10Y, 은행채 3M/1Y/2Y/3Y/5Y, 회사채 1Y/3Y, 기타금융채 2Y.
+  - DB-only helper metrics such as 국고채 2Y/30Y and `credit_spread_aa0_2y` remain in DB/history but are no longer shown in the main rates table.
+  - Renamed the equities card from `주식·투자자` to `주식·암호화폐`.
+  - Investor-flow card is separate and ordered left/right as 채권 then 주식.
+  - FX ordering now puts `달러인덱스` below `달러/엔` and `유로/달러`.
+- Verified `2026-05-29` DB observations have no duplicated metric keys and 15 investor-flow rows.
+- Render publish failed because `render.yaml` set `DAILY_REPORT_READ_ONLY=true`; changed it to `false` so Admin publish/save actions are allowed after deploy.
+
+
 ## 2026-05-29 PNG visible metric coverage
 
 User requirement clarified: every numeric row visible in the monthly PNG report tables should be represented in the DB and public report UI, excluding the yellow comment box text.

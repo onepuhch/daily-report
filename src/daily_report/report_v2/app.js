@@ -445,11 +445,16 @@ function buildCalendarHtml(year, month, available, currentDate) {
   `;
 }
 
+function localDateString(date = new Date()) {
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 function openCalendarPopover(anchor) {
   const available = new Set(state.reports.map((report) => report.date));
   const base = state.currentDate && DATE_PATTERN.test(state.currentDate)
     ? state.currentDate
-    : (state.reports[0]?.date || new Date().toISOString().slice(0, 10));
+    : (state.reports[0]?.date || localDateString());
   let viewYear = Number(base.slice(0, 4));
   let viewMonth = Number(base.slice(5, 7)) - 1;
 
