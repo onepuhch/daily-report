@@ -10,7 +10,7 @@ History decision record:
 
 Leftover to be aware of:
 
-- Supabase still has the `economic_events` table and June 2026 seed rows (user ran the SQL on 2026-06-05), but nothing in the product reads it anymore. Decide later: drop the table, or keep it for a future calendar reintroduction.
+- Supabase still has the `economic_events` table and June 2026 seed rows (user ran the SQL on 2026-06-05); nothing in the product reads it right now. **2026-06-11 user decision: keep the table — the calendar will be reintroduced later.** The dropped route/UI/seed SQL can be recovered from the reverted commits (see `docs/HANDOFF_ARCHIVE.md`).
 
 ## 2026-06-11 Metric definition single source, startup guard, first automated tests
 
@@ -147,7 +147,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 ## 지금 바로 할 일
 
 1. **Telegram 실패 알림 활성화** — 코드는 들어가 있다(`Run-DailyMarketUpdate.ps1`의 `Send-FailureAlert`). 운영자가 `.env`에 `DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN` / `DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID`를 채우면 끝. 절차는 `docs/OPERATOR_GUIDE.md`의 "자동 실행 실패 알림" 참조.
-2. **Supabase `economic_events` 테이블 처분 결정** — 2026-06-08 원복으로 경제 캘린더 UI/API가 제거됐지만 Supabase에는 테이블과 6월 시드 데이터가 남아 있다. 캘린더를 재도입할 계획이 없으면 SQL editor에서 `drop table public.economic_events;`로 정리, 재도입 예정이면 그대로 둔다.
+2. **Supabase `economic_events` 테이블은 유지** — 2026-06-11 사용자 결정: 경제 캘린더는 나중에 재도입 예정이므로 테이블과 6월 시드 데이터를 그대로 둔다. 재도입 시 API 라우트/UI/시드 SQL은 폐기 커밋(`8a9abf7` 등, `docs/HANDOFF_ARCHIVE.md` 참조)에서 참고할 수 있다.
 3. **needs_review 과거 코멘트 정리 (선택, 틈틈이)** — `data\historical_ocr\cleaned_comments\needs_review.json`의 항목을 `boxes\*.comment_box.png` 원본과 대조해 승인 폴더로 이동.
 4. **다음 기능 추가 시 모듈 분리 시작** — `server.mjs`(~98KB)는 라우트 단위, `report_v2/app.js`(~87KB)는 기능 단위로, 새 코드를 별도 모듈로 빼는 것부터 시작한다. 빅뱅 리팩토링은 하지 않는다.
 
