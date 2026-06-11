@@ -41,11 +41,12 @@ function Assert-ReadableText {
 function Invoke-JsonCheck {
   param(
     [string]$Name,
-    [string]$Url
+    [string]$Url,
+    [int]$TimeoutSec = 15
   )
 
   try {
-    $response = Invoke-RestMethod -Method Get -Uri $Url -TimeoutSec 15
+    $response = Invoke-RestMethod -Method Get -Uri $Url -TimeoutSec $TimeoutSec
     Write-Host "[OK] $Name $Url"
     return $response
   } catch {
@@ -213,7 +214,8 @@ try {
   Invoke-HttpCheck "public report" "$baseUrl/report"
   Invoke-HttpCheck "public report v2" "$baseUrl/report-v2"
 
-  $validation = Invoke-JsonCheck "latest validation" "$baseUrl/api/validation/$latestDate"
+  # Validation runs a Python cross-check (Supabase + Yahoo) and can exceed 15s on a fresh date.
+  $validation = Invoke-JsonCheck "latest validation" "$baseUrl/api/validation/$latestDate" -TimeoutSec 60
   Assert-Condition ($validation.report_date -eq $latestDate) "validation date does not match latest date."
   Assert-Condition ($validation.observations -gt 0) "validation observations are empty."
   Assert-Condition ($validation.status -eq "pass") "latest validation did not pass."

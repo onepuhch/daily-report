@@ -1,5 +1,19 @@
 # Daily Report Handoff
 
+## 2026-06-12 Telegram alert live, server.mjs module split (1st slice)
+
+- **Telegram failure alert is now active.** User created the bot, filled `DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN`/`CHAT_ID` in the parent `project\.env`, and a live test message was delivered. Every failed path of the 07:00 batch now notifies the operator. (Setup gotcha fixed: the token key name had been pasted as `...BOT_TOKEN/CHAT_ID`.)
+- **server.mjs first module split** (2,885 → 1,816 lines), pure move-only refactor, route logic untouched:
+  - `src/daily_report/admin/lib/http.mjs` — mimeTypes, sendJson/sendText, isTruthy, isPathInside, staticCacheControl, safeEqual, isDate, parseJson, toNumber, readBody.
+  - `src/daily_report/admin/lib/supabase.mjs` — readDotEnv, getSupabaseConfig, supabaseRest, bestEffortSupabase, sqlString, sqlArray.
+  - `src/daily_report/admin/lib/render_review.mjs` — categoryLabels, all Korean formatters, buildAutoCommentDraft, buildReviewHtml (~650-line HTML builder).
+  - Deleted dead code found during the move: `groupObservations`, `buildHighlightCards`, `buildTopMoverList` (defined, never called — same category as `computeSignal` removed in b397774).
+  - `report_v2/app.js` split is deferred to the next feature that touches it (browser-side, needs visual verification).
+- `scripts/Verify-Pipeline.ps1`: the latest-validation check now uses a 60s timeout (was 15s). The validation endpoint runs a Python Supabase+Yahoo cross-check that takes ~18s on a fresh date, which made the smoke test flaky on the first run after a new report lands.
+- Repo hygiene: deleted stray local `server*.log` files from the repo root (already gitignored).
+
+Validation: `node --check` on server.mjs + 3 new lib modules, dynamic import check of all module exports, `npm test` 7/7, `scripts\verify-pipeline.cmd` all checks pass (latest `2026-06-11`, observations 59, KOSPI 302 points). Today's 07:00 batch ran successfully on its own.
+
 ## 2026-06-11 Collaborator-feature revert reconciliation (read this first)
 
 History decision record:
@@ -140,16 +154,15 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 ---
 
 ## 한 줄 요약
-일일 자동 발행 파이프라인(07:00 배치 → 검증 → Supabase → Admin 코멘트 → 공개 V2)이 59개 지표로 작동 중이고, Render 데모 배포까지 완료된 상태다. 지금은 새 기능보다 운영 안정화(실패 알림, 월간 캘린더 갱신, 점진 모듈 분리)를 우선한다.
+일일 자동 발행 파이프라인(07:00 배치 → 검증 → Supabase → Admin 코멘트 → 공개 V2)이 59개 지표로 작동 중이고, Render 데모 배포와 Telegram 실패 알림까지 완료된 상태다. 지금은 새 기능보다 운영 안정화를 우선한다.
 
 ---
 
 ## 지금 바로 할 일
 
-1. **Telegram 실패 알림 활성화** — 코드는 들어가 있다(`Run-DailyMarketUpdate.ps1`의 `Send-FailureAlert`). 운영자가 `.env`에 `DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN` / `DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID`를 채우면 끝. 절차는 `docs/OPERATOR_GUIDE.md`의 "자동 실행 실패 알림" 참조.
+1. **needs_review 과거 코멘트 정리 (선택, 틈틈이)** — `data\historical_ocr\cleaned_comments\needs_review.json`의 항목을 `boxes\*.comment_box.png` 원본과 대조해 승인 폴더로 이동.
 2. **Supabase `economic_events` 테이블은 유지** — 2026-06-11 사용자 결정: 경제 캘린더는 나중에 재도입 예정이므로 테이블과 6월 시드 데이터를 그대로 둔다. 재도입 시 API 라우트/UI/시드 SQL은 폐기 커밋(`8a9abf7` 등, `docs/HANDOFF_ARCHIVE.md` 참조)에서 참고할 수 있다.
-3. **needs_review 과거 코멘트 정리 (선택, 틈틈이)** — `data\historical_ocr\cleaned_comments\needs_review.json`의 항목을 `boxes\*.comment_box.png` 원본과 대조해 승인 폴더로 이동.
-4. **다음 기능 추가 시 모듈 분리 시작** — `server.mjs`(~98KB)는 라우트 단위, `report_v2/app.js`(~87KB)는 기능 단위로, 새 코드를 별도 모듈로 빼는 것부터 시작한다. 빅뱅 리팩토링은 하지 않는다.
+3. **`report_v2/app.js` 모듈 분리** — 다음에 V2 화면 기능을 건드릴 때 그 기능부터 별도 모듈로 분리(브라우저 시각 확인 필요해서 미룸). `server.mjs`는 1차 분리 완료(`lib/http.mjs`, `lib/supabase.mjs`, `lib/render_review.mjs`), 다음 단계는 라우트 핸들러 분리.
 
 ---
 
@@ -158,7 +171,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 - **`scripts/` 폴더** — Excel + 인포맥스 add-in 매크로 파이프라인. Codex가 세팅한 데이터 추출 코어.
 - **`.env`** — 커밋 금지 (`.gitignore` 등록됨). Supabase URL/Key 들어있음.
 - **카카오뱅크 브랜드 색상** — 컴플라이언스. 중립 팔레트(Stripe blue + 한국식 빨/파)만 사용.
-- **데이터 API 라우트와 헬퍼 함수** — `/api/reports`, `/api/comments/*`, `/api/ask`, `/api/metrics/*`, `extractMetrics`, `formatChange` 등은 그대로 사용.
+- **데이터 API 라우트와 헬퍼 함수** — `/api/reports`, `/api/comments/*`, `/api/ask`, `/api/metrics/*`, `extractMetrics`, `formatChange` 등은 그대로 사용. (2026-06-12부터 공용 헬퍼는 `src/daily_report/admin/lib/` 모듈에 있음 — 위치만 이동, 동작 계약은 불변.)
 
 ---
 
@@ -166,7 +179,8 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -
 
 | 영역 | 상태 | 내용 |
 |---|---|---|
-| 데이터 적재 | 안정 운영 | 07:00 배치 → 추출 → 검증 → Supabase 업로드 작동. 59개 지표(투자자 동향 15개 포함). 실패 시 Telegram 알림 코드 추가(.env 설정 필요). |
+| 데이터 적재 | 안정 운영 | 07:00 배치 → 추출 → 검증 → Supabase 업로드 작동. 59개 지표(투자자 동향 15개 포함). 실패 시 Telegram 알림 발송(2026-06-12 활성화·발송 테스트 완료). |
+| 서버 구조 | 1차 분리 완료 | `server.mjs` 2,885→1,816줄. 공용 헬퍼는 `lib/http.mjs`·`lib/supabase.mjs`·`lib/render_review.mjs`로 이동(순수 이동, 동작 불변). 다음 단계는 라우트 분리. |
 | 지표 매핑 | 단일화 완료 | `scripts/metric_definitions.json`이 단일 진실 소스. Python/PowerShell 양쪽이 여기서 로드. `npm test`로 검증. |
 | 검증 gate | 작동 중 | pre-upload 검증 실패 시 업로드 차단, post-upload DB 검증, `job_runs` 기록. |
 | 자동화 로그 | 작동 중 | `job_runs` 기록, Admin 로그 보기 팝업, 실패 행 재실행. |
@@ -325,6 +339,9 @@ Phase C는 골격만. 실제 LLM 호출은 Phase H에서.
 ## 작업 일지 (최근 5건만 유지, 시간 역순)
 
 > 그 이전 history는 `docs/HANDOFF_ARCHIVE.md`와 `git log`로 충분. 이 섹션은 항상 최신 5건으로 잘라쓰기.
+
+### 2026-06-12 — Claude — Telegram 알림 활성화 + server.mjs 1차 모듈 분리
+사용자 봇 생성·`.env` 설정 후 실발송 테스트 성공(전 실패 경로 알림 활성). `server.mjs` 2,885→1,816줄: `lib/http.mjs`(HTTP 유틸)·`lib/supabase.mjs`(REST 계층)·`lib/render_review.mjs`(포맷터+HTML 빌더) 순수 이동 분리, dead code 3건 삭제(`groupObservations`/`buildHighlightCards`/`buildTopMoverList`). `Verify-Pipeline.ps1` 검증 체크 타임아웃 15→60초(새 날짜 첫 검증 ~18초 소요로 flaky했음). 검증: node --check 4파일, import 체크, npm test 7/7, verify-pipeline 통과(latest 2026-06-11, obs 59).
 
 ### 2026-06-11 — Claude — 원복 정합화 + 전체 감사 후속 (매핑 단일화/startup 가드/테스트/실패 알림/아카이브)
 로컬에 남아있던 원복 이전 히스토리를 원격(`b397774`) 기준으로 rebase. `scripts/metric_definitions.json` 단일 진실 소스화(Python/PS1 양쪽 로드), `server.mjs` fail-closed startup 가드, 첫 자동 테스트 7건(`npm test`), `Run-DailyMarketUpdate.ps1` Telegram 실패 알림(.env 설정 시 활성화), HANDOFF.md 과거 일지를 `docs/HANDOFF_ARCHIVE.md`로 분리, 원복으로 되살아난 UTC 날짜 버그 재수정. 검증: npm test 7/7, verify-pipeline 통과.
