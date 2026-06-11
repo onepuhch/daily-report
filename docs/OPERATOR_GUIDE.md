@@ -70,6 +70,45 @@ Market Daily Supabase Upload
 - 로그인 자동 클릭이 문제를 일으키면 `.env`에 `INFOMAX_LOGIN_AUTO_SUBMIT=false`를 설정합니다.
 - 로그인 창이 떠서 사람이 아이디/비밀번호를 직접 입력해야 하는 환경이면 완전 자동화가 불가능하므로, 인포맥스 자동 로그인/저장 로그인 설정이 필요합니다.
 
+## 자동 실행 실패 알림 (Telegram)
+
+07:00 배치가 실패하면 Telegram 메시지로 즉시 알림을 받을 수 있습니다.
+
+설정 (1회):
+
+1. Telegram에서 `@BotFather`에게 `/newbot`을 보내 봇을 만들고 토큰을 받습니다.
+2. 만든 봇에게 아무 메시지나 한 번 보낸 뒤, `@userinfobot`으로 내 chat id를 확인합니다.
+3. `.env`에 추가합니다.
+
+```text
+DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN=123456:ABC...
+DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID=123456789
+```
+
+동작:
+
+- 배치의 모든 실패 경로(엑셀 새로고침, JSON 추출, 업로드 전/후 검증, Supabase 업로드)에서 실패 메시지, run id, 로그 파일 경로가 Telegram으로 전송됩니다.
+- 두 값이 비어 있으면 알림 없이 기존과 동일하게 동작합니다 (로그에 skip 한 줄만 남음).
+- 알림 전송 자체가 실패해도 배치 처리에는 영향이 없습니다.
+
+## 경제지표 캘린더 월간 갱신
+
+`economic_events` 테이블은 자동 수집이 아니므로 매월 말에 다음 달 일정을 넣어야 합니다. 비어 있으면 V2 캘린더가 다음 달에 빈 상태가 됩니다.
+
+매월 말 루틴:
+
+1. 다음 달 시드 파일 골격 생성:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\New-EconomicEventsSeed.ps1
+```
+
+   (기본값 = 다음 달. 특정 달은 `-Year 2026 -Month 8`처럼 지정)
+
+2. 생성된 `db\economic_events_seed_YYYY_MM.sql`의 TODO 예시 행을 실제 일정으로 교체합니다 (금통위, FOMC, CPI, 고용지표, 휴장일 등).
+3. Supabase SQL editor에서 해당 파일을 실행합니다. 같은 파일을 다시 실행해도 중복 없이 갱신됩니다 (`on conflict ... do update`).
+4. 파일을 커밋합니다.
+
 ## Admin 열기
 
 ```text

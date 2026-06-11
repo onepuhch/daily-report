@@ -1,0 +1,1208 @@
+# Daily Report Handoff Archive
+
+2026-05 작업 일지 원본 보관 파일. 현재 상태/다음 할 일은 `HANDOFF.md`를 본다.
+이 파일은 과거 맥락 추적용이며 갱신하지 않는다.
+
+---
+
+## 2026-05-29 PNG visible metric coverage
+
+User requirement clarified: every numeric row visible in the monthly PNG report tables should be represented in the DB and public report UI, excluding the yellow comment box text.
+
+- Added visible domestic-rate rows that were previously excluded from the active Excel mapping:
+  - `monetary_stab_1y`, `monetary_stab_2y`
+  - `bank_aaa_3m`, `bank_aaa_1y`, `bank_aaa_2y`, `bank_aaa_3y`, `bank_aaa_5y`
+  - `kr_corp_aa0_1y`, `other_fin_aa_minus_2y`
+  - Existing `kr_corp_aa0_3y` is now categorized under `domestic_rates` so it appears with the PNG domestic-rate table.
+- Updated both active mapping copies:
+  - `scripts/Export-MarketDailyCachedValues.ps1`
+  - `scripts/import_historical_market_data.py`
+- Updated `src/daily_report/report_v2/app.js` to sort metrics in the same practical order as the PNG tables, so newly added rows do not appear at the bottom due Supabase `created_at` ordering.
+- Re-uploaded Supabase observations from `2025-06-02` through `2026-05-28` after adding the metrics:
+  - 242 reports uploaded
+  - 11,032 observations uploaded
+  - Latest `2026-05-28` validation now passes with 59 observations.
+- Added/updated `scripts/compare_png_report_data.py`:
+  - Compares 55 visible metric cells per PNG.
+  - Reads section header dates from PNG boxes and uses those dates per section instead of assuming the PNG filename date.
+  - Output files:
+    - `data/png_report_validation/png_report_data_comparison.csv`
+    - `data/png_report_validation/png_report_data_comparison_summary.json`
+- Full PNG comparison over 200 PNGs completed:
+  - 11,000 cells checked
+  - 6,557 matched
+  - 668 OCR failures
+  - 1,477 OCR/date/value mismatches
+  - 2,298 DB missing cells
+- Key finding: newly added domestic-rate rows now match for current samples, e.g. 2026-05-27 PNG vs section date 2026-05-26 matched 통안채/은행채/회사채/기타금융채 values exactly.
+- Remaining DB-missing cells are dominated by historical investor-flow rows. The current Excel workbook does not contain those older investor-flow dates, so Excel re-upload cannot fill them. A separate PNG backfill is needed for old investor-flow values if the web must show them for all historical PNG dates.
+
+### Investor-flow PNG backfill
+
+- Added `scripts/backfill_investor_flows_from_png.py` to extract the 5x3 투자자별 매매 동향 matrix from historical PNGs.
+  - Uses the 국내 주식 및 환율 section date as the observed/report date.
+  - Crops each investor-flow numeric cell, enlarges it, runs number-only Tesseract OCR, and uploads only missing observations.
+  - Existing Excel-sourced investor-flow rows are preserved.
+- Ran full backfill over 200 PNGs:
+  - Extracted 3,000 investor-flow cells.
+  - Uploaded 1,182 missing observations to Supabase.
+  - Skipped 1,818 rows because matching observations already existed or duplicate PNG candidates pointed to the same report date/metric.
+  - OCR failures: 0.
+- Audit outputs:
+  - `data/png_investor_flow_backfill/summary.json`
+  - `data/png_investor_flow_backfill/investor_flow_extracted.csv`
+  - `data/png_investor_flow_backfill/investor_flow_upload_rows.csv`
+  - `data/png_investor_flow_backfill/investor_flow_skipped.csv`
+- Post-backfill Supabase checks:
+  - `2025-07-14` now has 15 investor-flow observations from `historical_png_table`.
+  - Recent dates such as `2026-05-26` and `2026-05-28` still have 15 investor-flow observations from `infomax_excel_cached`.
+  - `market_observations` count increased to 15,257.
+- Re-ran full PNG comparison after backfill:
+  - 11,000 cells checked
+  - 7,911 matched
+  - 668 OCR failures
+  - 2,286 OCR/date/value mismatches
+  - 135 DB missing cells
+- Remaining mismatches are mostly full-page OCR limitations in commodities/crypto/investor-flow checks rather than confirmed DB gaps. Use the backfill audit CSVs and cropped-cell OCR script for investor-flow review instead of the older full-page OCR comparison rows.
+
+## 2026-05-29 Infomax stale-session recovery
+
+Today's 07:00 batch failed before JSON/upload:
+
+- Log: `data\logs\daily_update_20260529_070002.log`
+- Infomax process check passed (`infomaxmain`, `imxlcommapp` existed), but Excel COM attachment failed within 60 seconds after opening the workbook through shell.
+- Supabase latest remained `2026-05-27`; expected latest was `2026-05-28`.
+- Manual restart of Infomax fixed Excel formulas, confirming the failure mode was a stale/broken Infomax add-in session, not missing workbook data.
+
+Changed `scripts\Refresh-InfomaxWorkbook.ps1`:
+
+- First attempt still reuses an already-running Infomax session.
+- If refresh fails before save, the script now performs one recovery retry by default:
+  - stop `EXCEL`, `infomaxmain`, `imxlcommapp`, `infomaxlogin`
+  - start `infomaxlogin.exe`
+  - submit login using the existing Enter flow
+  - wait for Infomax/add-in settle
+  - reopen Excel through shell
+- Before saving, the workbook is scanned for the literal `조회 실패`; if found, the script throws and does not save/upload.
+- Config knobs:
+  - `INFOMAX_RECOVERY_RETRIES` default `1`
+  - `INFOMAX_RESTART_PROCESSES` default `EXCEL,infomaxmain,imxlcommapp,infomaxlogin`
+
+## 2026-05-28 Report V2 data/UI follow-up
+
+Checked today's 07:00 batch and Report V2 data path after the Excel close warning change.
+
+- Today's scheduled run succeeded:
+  - Log: `data\logs\daily_update_20260528_070002.log`
+  - Latest Supabase report: `2026-05-27`
+  - Uploaded reports: 7, observations: 350
+  - Latest report validation: pass, 50 observations
+- `Workbook close skipped` / `RPC_E_CALL_REJECTED` is treated as non-fatal when save/upload completed.
+- Historical comment auto-approval was tightened:
+  - `scripts/clean_historical_comments.py` now flags Latin OCR leftovers such as `AO|G]`, `Soo`, `EX`, and `??` blocks.
+  - The cleaner clears stale `approved` / `needs_review` text files before rewriting classifications.
+  - Latest OCR rerun: 200 processed, 0 failures, 28 approved, 172 needs review.
+- Server fallback now ignores unusable DB comment text such as `??? ???` and clears it before applying a cleaned PNG fallback. This fixed `2026-05-14`, where the cleaned fallback existed but the DB `final_comment` was still winning.
+- Current 2026-04/05 audit:
+  - Recent reports with full data and investor flows: 2026-05-18 through 2026-05-27 generated by the new 50-observation mapping.
+  - Older reports still have 35/27/29 observations and 0 investor-flow rows until historical market data is backfilled.
+  - Auto-shown cleaned historical comments in April/May are now limited to 6 dates plus the user test comment on 2026-05-26.
+
+## 2026-05-27 Render demo deployment prep
+
+동료 외부 리뷰용 클라우드 배포 준비를 추가했다. 목표는 내일 임시 공개 URL로 `/report-v2`를 보여주되, 저장/발행/재실행은 막는 읽기 전용 데모다.
+
+- `src/daily_report/admin/server.mjs`
+  - `DAILY_REPORT_ADMIN_HOST` 지원 추가. Render에서는 `0.0.0.0`, 로컬 기본값은 기존처럼 `127.0.0.1`.
+  - `DAILY_REPORT_BASIC_AUTH_USER` / `DAILY_REPORT_BASIC_AUTH_PASSWORD`가 설정되면 `/api/health`를 제외한 전체 화면/API에 Basic Auth 적용.
+  - `DAILY_REPORT_READ_ONLY=true`이면 `GET/HEAD/OPTIONS`와 `/api/ask` 외 POST/PUT/PATCH/DELETE를 403으로 차단. 데모 URL에서 코멘트 저장, 발행, 작업 재실행 방지 목적.
+- `render.yaml` 추가: Render Free Web Service용 blueprint. `DAILY_REPORT_ADMIN_HOST=0.0.0.0`, `DAILY_REPORT_READ_ONLY=true`, `DAILY_REPORT_AI_PROVIDER=rule_based` 기본값 포함.
+- `docs/RENDER_DEPLOYMENT.md` 추가: Render 생성, 환경변수, 접속 URL, 운영 주의사항 정리.
+- `.env.example`에 서버 host/auth/read-only env 문서화.
+
+검증:
+- `node --check src\daily_report\admin\server.mjs` 통과.
+- Basic Auth/read-only 로컬 테스트 통과: health 200, 미인증 reports 401, 인증 reports 200, read-only comment POST 403.
+- `git diff --check` 통과.
+- `scripts\verify-pipeline.cmd` 통과(latest `2026-05-26`, observations 50, KOSPI series 291).
+
+다음 할 일:
+1. 이 커밋을 GitHub에 push.
+2. Render에서 GitHub repo 연결 → `render.yaml` 적용.
+3. Render 환경변수 설정:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `DAILY_REPORT_BASIC_AUTH_USER`
+   - `DAILY_REPORT_BASIC_AUTH_PASSWORD`
+4. 배포 후 `https://<service>.onrender.com/report-v2`를 열어 Basic Auth 로그인 후 최신 리포트가 보이는지 확인.
+5. 무료 Render는 idle 후 sleep/cold start가 있으므로 내일 동료에게 보여주기 2~3분 전에 한 번 접속해 깨워둔다. 장기 운영은 유료 Web Service로 전환.
+## 2026-05-27 Historical PNG comments and investor-flow UI
+
+User clarified that historical comments must come only from the yellow comment box in the lower-right of each monthly PNG (`C:\Users\infomax\Desktop\Market Daily\2507` ... `2605`), not from surrounding tables.
+
+- Added `scripts/clean_historical_comments.py`.
+- The script can scan monthly PNG folders with:
+  `.\.venv-docling\Scripts\python.exe scripts\clean_historical_comments.py --source-root "C:\Users\infomax\Desktop\Market Daily" --force`
+- It detects the yellow comment box, OCRs only that region, extracts `[국내]` and `[해외]`, and writes review outputs under `data\historical_ocr\cleaned_comments\`.
+- Current run result:
+  - Source PNG dates: 200
+  - Processed: 200
+  - Failures: 0
+  - Section missing: 0
+  - Approved/high-confidence: 67
+  - Needs manual review: 133
+- Public report fallback now reads only `data\historical_ocr\cleaned_comments\approved\{date}.comment.txt`. It no longer auto-displays raw OCR or unapproved review text. This prevents PHIL/구리/table rows and suspicious OCR tokens from leaking into `/report-v2`.
+- `needs_review.json` lists dates/tokens/images needing manual correction. Do not bulk upload those to `report_comments` until reviewed.
+- Example behavior after restart:
+  - `2026-04-15`: `historical_comment_source=cleaned_png_comment`, approved comment appears.
+  - `2026-05-22`: has suspicious tokens, so no historical fallback is shown until corrected/approved.
+
+Report V2 UI changes:
+
+- Removed duplicated hero/comment text below `Market Daily`; `Daily Brief` now carries the commentary.
+- Removed the `전일 국내외 채권시장 영향 요약` subheading; only `Daily Brief` remains.
+- `[국내]` and `[해외]` are rendered as separate small section headings with body text below.
+- Investor flows were separated from the equities card into a full-width `투자자별 매매 동향` card between equities and FX/commodities.
+- Investor-flow card layout:
+  - 주식: KOSPI, KOSDAQ, KOSPI200 선물
+  - 채권: 국채선물 3년, 국채선물 10년
+  - columns: 외국인 / 기관 / 개인
+
+Important remaining work:
+
+- Historical market data before the investor-flow mapping was restored still has only 35 observations. Example: `2026-04-15` has `flows=0`; latest `2026-05-26` has `flows=15`. Backfill old report rows from the workbook/current 50-metric mapping if investor-flow history is needed for old dates.
+- Some report dates exist without matching PNG files, so they will not have historical comments unless source images are found or comments are written manually.
+- The 133 `needs_review` comments should be corrected against their `boxes\*.comment_box.png` images, then moved/copied into `approved\{date}.comment.txt` or saved to Supabase `report_comments.final_comment`.
+
+Validation:
+
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\report_v2\app.js`
+- `.\.venv-docling\Scripts\python.exe -m py_compile scripts\clean_historical_comments.py`
+- `powershell -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` passed with latest `2026-05-26`, observations `50`, metric `kospi`, points `291`.
+
+## 2026-05-27 Infomax/Excel startup automation fix
+
+Fixed the 07:00 batch failure path where Infomax was sometimes closed before the scheduled run.
+
+- Pulled latest `origin/master` first, then reapplied the Infomax automation changes on top of commit `4ce2ce2`.
+- `scripts/Refresh-InfomaxWorkbook.ps1` now treats `infomaxmain` as the "Infomax is already running" signal. If it is present, the script skips launcher/login and proceeds to Excel.
+- If Infomax is not running, the script starts `C:\Infomax\bin\infomaxlogin.exe`, waits 3 seconds, sends Enter, waits 15 seconds after the login submit, and keeps retrying within the startup timeout.
+- Added blind Enter fallback (`INFOMAX_LOGIN_BLIND_ENTER=true`) because manual testing showed `infomaxlogin.exe` + 3 seconds + Enter starts Infomax reliably on this PC.
+- Added a settle wait before Excel open (`INFOMAX_READY_SETTLE_SECONDS=120`) because Infomax processes can appear before the Excel add-in bridge is actually ready.
+- Important discovery: Excel opened with `New-Object -ComObject Excel.Application` did not reliably load the Infomax add-in. User-opened Excel did load it. The script now defaults to `INFOMAX_EXCEL_OPEN_MODE=shell`, opens `MARKET DAILY.xlsm` through Windows Shell, then attaches to the running Excel COM instance for refresh/save.
+- `.env.example` documents the new operational knobs:
+  - `INFOMAX_LAUNCHER_PATH`
+  - `INFOMAX_RUNNING_PROCESSES`
+  - `INFOMAX_REQUIRED_PROCESSES`
+  - `INFOMAX_LOGIN_AUTO_SUBMIT`
+  - `INFOMAX_LOGIN_BLIND_ENTER`
+  - `INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS`
+  - `INFOMAX_POST_LOGIN_WAIT_SECONDS`
+  - `INFOMAX_READY_SETTLE_SECONDS`
+  - `INFOMAX_LOGIN_WINDOW_KEYWORDS`
+  - `INFOMAX_STARTUP_WAIT_SECONDS`
+  - `INFOMAX_EXCEL_OPEN_MODE`
+  - `INFOMAX_EXCEL_ATTACH_WAIT_SECONDS`
+- Parent `.env` was left with only the existing local workbook path. The tested behavior is now encoded as script defaults, while `.env.example` documents optional overrides.
+
+Manual test result:
+
+- With Infomax fully closed, ran:
+  `powershell -ExecutionPolicy Bypass -File scripts\Refresh-InfomaxWorkbook.ps1 -WorkbookPath "C:\Users\infomax\Desktop\Market Daily\MARKET DAILY.xlsm" -Visible`
+- Result: Infomax launched, login Enter was sent, processes became ready, the script waited for bridge settle, opened the workbook through Windows Shell, refreshed formulas, waited 90 seconds, saved successfully.
+- Verification performed: PowerShell parser check passed and `git diff --check` passed.
+
+## 2026-05-27 Admin redesign — workflow-first single screen
+
+사용자 피드백(코덱스 상태보드 4카드/4탭 구조가 실제 업무와 안 맞음)을 받아 Admin을 "한 화면에서 상태 파악 → 데이터 보며 코멘트 작성 → 실물 검증 → 발행" 흐름으로 재설계했다. `src/daily_report/admin/{index.html,app.js,styles.css}`만 수정(서버 API 무변경).
+
+- 4탭(데이터/미리보기/코멘트/검증) 제거 → 단일 `report` 화면 + `jobs`(자동화 로그) 두 뷰만. 4개 상태카드 → 상단 한 줄 `statusbar` 칩(데이터 N개 / 검증 / draft).
+- 레이아웃: 좌우 균형 2단 `report-grid`(minmax(0,1fr) 2개). **좌=시장 데이터**(`data-column`, sticky + 패널 내부 스크롤 + thead 고정), **우=코멘트**(메모→초안→최종→발행 step-card). 리서치 근거·이력은 `collapse-card`로 접어둠.
+- 데이터 좌측 쏠림 수정: `.data-table { width: min(100%,900px) }` → `width:100%`.
+- 검증 자동화: 날짜 열면 `runValidation({silent:true})` 자동 실행. 통과면 칩 `검증 통과`, 차이 날 때만 상단 주황 `validation-banner`로 알림 → `상세·승인` 모달.
+- 미리보기 = 실제 V2: 기존 `output/market_daily_*.html`(옛 생성물) → **`/report-v2?date=`**(독자가 보는 실물, 코멘트 반영). 상단 `[V2 미리보기]` → 큰 모달 iframe. 저장 시 열려 있으면 새로고침.
+- 제목 단순화: `Comment Workflow / Daily Report YYYY-MM-DD` 제거 → statusbar에 `Comment`만. 좌측 사이드바 `DR` 브랜드 박스 제거.
+- 상태 드롭다운(draft/reviewed/published) 제거 → 버튼 2개: `임시저장`(draft) / `저장 및 발행`(published). `reviewed`는 UI에서만 제거(서버 감사 로그 기능은 유지). `saveComment(status)`로 통합. 상태값은 독자 리포트 배지 라벨만 바꾸고 공개 여부엔 무관.
+
+같이 커밋된 선행 변경(이전 세션/codex): `db/schema.sql` + 신규 `db/comment_versions_approval_events.sql`(comment_versions/approval_events 테이블), `server.mjs`(source_documents 과거 코멘트 fallback, 이력 best-effort). 새 테이블은 Supabase SQL Editor에서 1회 적용해야 이력 저장이 실제 동작.
+
+검증:
+
+- `node --check src\daily_report\admin\app.js` 통과.
+- index.html ↔ app.js id 매핑 64개 누락·중복 0, HTML 태그 균형 확인.
+- `scripts\Verify-Pipeline.ps1` 전 항목 통과(latest 2026-05-21, observations 35, KOSPI 289포인트).
+
+다음 할 일(선택):
+- 시장 데이터 변동폭順 자동 정렬(움직인 지표 먼저) — 미적용, 현재 카테고리 순.
+- 새 이력 테이블 Supabase 적용(`db/comment_versions_approval_events.sql`).
+- 실기기에서 좌우 비율/미리보기 모달 크기 사용성 확인.
+
+## 2026-05-25 V2 UI refinement (branding/cards/trend/calendar)
+
+사용자 2차 공개 V2 리뷰 11개 피드백을 반영했다. 의사결정은 D-021~D-023, 상세 플랜은 plan 파일(`ethereal-orbiting-simon.md`) 참고.
+
+- 브랜딩: 좌측 사이드 브랜드(노란 박스 + "Market Daily")를 카카오뱅크 로고로 교체. 가로형 시그니처(`kakaobank-signature.svg`)를 기본, 축소 사이드바(≤1180px)에서는 심볼(`kakaobank-symbol.svg`)로 스왑. 두 SVG는 `src/daily_report/report_v2/`에 배치(서버가 `/report-v2/*`로 서비스). 테마 색은 중립 유지(노란색 미사용). 좌하단 `KB / Treasury market brief.` 노트 제거.
+- Daily Brief: 우측 Market Watch 카드(및 "4" 배지) 제거, Daily Brief 전체 폭. `getTopMovers` dead code 제거.
+- 오버뷰 트렌드: 헤더를 `Trends / 주요 시장 추이` → `1M Trends / 월간 추이`로 변경. 미니 차트는 최근 ~22거래일(1개월)로 슬라이스(`TREND_WINDOW`). 슬롯 제목을 고정값 대신 선택 지표의 카테고리 라벨로 동적화. 하단 "N개 관측치"를 날짜 범위(가로축)로 교체하고 세로축에 최소/최대값 추가. Trend Lab 상세 카드에도 세로축 적용.
+- 드롭다운/날짜: 긴 `<select>` 2곳을 바닐라 커스텀 UI로 교체. 트렌드 지표는 카테고리 그룹 + 검색 + 스크롤 팝오버(`openMetricPicker`/`openPopover`), 리포트 날짜는 이전/다음 화살표 + 월 달력 팝오버(`openCalendarPopover`, 리포트 있는 날짜만 활성).
+- 2x2 카드 재구성(D-022): `금리·크레딧` / `주식·투자자`(+암호화폐, +투자자 순매수) / `환율` / `원자재`. `CATEGORY_META`/`CATEGORY_ORDER`/`metricTone` 갱신(crypto→green). 투자자 동향은 15행 표 대신 기관/외국인/개인 컴팩트 블록(`renderFlowsBlock`)으로, 데이터 있을 때만 표시.
+- 은행채(D-023): 현재 intended_exclusion. UI는 `credit` 카테고리로 자동 표시되므로 코드 변경 불필요. 매핑 추가 + 재업로드는 인포맥스 PC 작업으로 `지금 바로 할 일`에 추가(투자자 동향 재업로드와 함께).
+
+데이터 주의: 이 로컬/fallback 환경의 `/api/history`는 일부 지표가 2026-04-08까지만 있어 1M 차트가 리포트 날짜(2026-05-21)까지 닿지 않는다. 코드 문제 아님 — Supabase history freshness 이슈로 투자자 동향 재업로드와 같은 성격.
+
+검증:
+
+- `node --check src\daily_report\report_v2\app.js`, `node --check src\daily_report\admin\server.mjs` 통과.
+- 임시 포트 서버로 정적 자산 200 확인: `/report-v2`, `app.js`, `styles.css`, `kakaobank-signature.svg`, `kakaobank-symbol.svg`(image/svg+xml), `/api/reports`.
+- Edge headless 데스크탑/모바일 스크린샷 재캡처: `design ref/figma-financial-dashboard/report-v2-{desktop,mobile}-check.png`. 로고/1M 헤더/Market Watch 제거/2x2(주식·투자자에 암호화폐 포함)/달력 버튼/모바일 오버플로 없음 확인.
+- `scripts\Verify-Pipeline.ps1` 전 항목 통과(latest 2026-05-21, observations 35, KOSPI 289포인트).
+
+## 2026-05-25 V2 trend/investor-flow follow-up
+
+Followed up on the interrupted public V2 review prompt.
+
+- Investor-flow data investigation:
+  - Current live latest API response for `2026-05-21` still has the older 35-observation payload and no `investor_flows` rows.
+  - Local workbook extraction now maps and extracts 50 observations from `MARKET DAILY.xlsm`, including 15 investor-flow metrics from `선물투자자별순매수금액` and `주식투자자별순매수금액`.
+  - `scripts\check_excel_coverage.py --workbook "MARKET DAILY.xlsm"` confirms 50 mapped metrics, 50 extracted observations, 0 missing metrics, and Python/PowerShell mapping parity 50 vs 50.
+  - Conclusion: the Excel data exists and the mapping is now restored locally; Supabase latest needs a refreshed upload/regeneration before investor-flow rows appear in Admin/API/public V2 for `2026-05-21`.
+- Overview trend cards:
+  - Kept three compact trend slots with dropdown selection.
+  - Initial selections are `kr_gov_3y`, `kospi`, and `usdkrw`.
+- Trend tab:
+  - Added/kept a dedicated Trend Lab view with grouped metric checkboxes and multi-card chart detail grid.
+  - Default detailed selections include `kr_gov_3y`, `kospi`, `usdkrw`, and `credit_spread_aa0_2y`.
+  - Fixed a refresh bug so the detailed Trend Lab charts re-render after history data loads instead of staying as one-point charts.
+- 2x2 market data cards:
+  - Preserved four public cards: `금리·크레딧`, `주식·투자자`, `환율·암호화폐`, `원자재`.
+  - Investor-flow rows now belong inside the `주식·투자자` card, grouped after domestic/global equities when DB data is available, so restoring investor flows will not create a fifth card.
+  - Domestic/overseas distinction is visible through grouped rows such as `국내금리`, `해외금리`, `국내주식`, `해외주식`.
+- Credit spread:
+  - `credit_spread_aa0_2y` is present in the live API and appears in the `금리·크레딧` table under `크레딧`.
+  - It is also selected by default in the detailed Trend Lab, which is the better place for the credit-spread chart than the compact Overview slots.
+- Mobile polish:
+  - Fixed mobile clipping in Daily Brief and Market Watch.
+  - Refreshed `report-v2-desktop-check.png` and `report-v2-mobile-check.png`.
+- Docs updated:
+  - `docs\EXCEL_COVERAGE.md`
+  - `docs\ADMIN_MVP_CHECKLIST.md`
+  - `docs\FINAL_READINESS_CHECKLIST.md`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `python scripts\check_excel_coverage.py --project-root . --workbook "MARKET DAILY.xlsm" --format json`
+- Edge headless DOM/screenshot checks for `/report-v2`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+- `scripts\final-readiness.cmd` passed.
+
+## 2026-05-25 V2 public-report information architecture pass
+
+Applied user design feedback from the first public V2 review.
+
+- Moved the public report away from operator/admin status exposure.
+  - Removed the visible operations strip from `/report-v2`.
+  - Removed the public process/validation card from the daily brief area.
+  - Removed top-right Admin and duplicated AI controls from the public top bar.
+- Reworked public navigation from `Overview / Indicators / Classic / Admin` to `Brief / Markets / Trends / AI`.
+- Changed the top date list to a compact date dropdown so the header line can stay clean.
+- Standardized the public title to `Market Daily` and removed the explanatory hero subtitle.
+- Replaced the redundant top ticker row with a compact `Market Pulse` card.
+- Changed `Daily Treasury Brief` copy to `Daily Brief` with the section title `전일 국내외 채권시장 영향 요약`.
+- Kept `Market Watch` because market dashboard/report references commonly use watchlist/top-mover patterns, but made it purely market-facing rather than process-facing.
+- Added a `Trends` section with clearly labeled 7-day charts for domestic rates, KOSPI, and USD/KRW.
+- Removed category-level direction tags such as `혼조`, `중립`, and `하락 우위`; they were too vague without written analyst context.
+- Labeled every small category sparkline as `7일 추이: {대표 지표}` so the mini charts are interpretable.
+- Fixed V2 category mapping:
+  - `국내 금리·크레딧` now includes `domestic_rates` and `credit`.
+  - `국내 주식·환율` now includes domestic equity metrics plus `usdkrw`.
+  - `해외 주식·환율·암호화폐` now combines `global_equities`, non-USD/KRW `fx`, and `crypto`.
+  - `투자자 동향` is hidden when no `investor_flows` observations exist.
+- Data gap noted: the current latest report API for `2026-05-21` returns 35 observations but no `investor_flows` rows. The UI no longer shows an empty investor-flow card, but the ingestion path still needs investor-flow data restored if that section is required in production.
+- Refreshed screenshots:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- Edge headless DevTools capture confirmed:
+  - title `Market Daily`
+  - date dropdown present
+  - `ops-card` count 0
+  - 3 trend cards
+  - 5 populated market category cards
+  - no desktop or mobile horizontal overflow
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` passed.
+- `scripts\final-readiness.cmd` passed after the refreshed screenshots.
+
+### Follow-up simplification from user review
+
+- Removed the `Market Pulse` hero card. The first screen now keeps `Market Daily` and the daily brief closer together with less unused whitespace.
+- Reduced the public left navigation to `Overview / Trend / AI`.
+- Re-grouped market data cards into reader-facing sections instead of source-category sections:
+  - `금리·크레딧`: domestic rates, global rates, and credit.
+  - `주식`: domestic and global equity indices.
+  - `환율·암호화폐`: FX and crypto.
+  - `원자재`: commodities.
+- Removed the small chart from each market data card header. Charting now lives only in the dedicated `Trend` section.
+- Removed the duplicated bottom-right AI button on desktop because the left nav already has AI. The floating AI button remains on mobile where the side nav is hidden.
+- Refreshed screenshots again:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+- Edge headless DevTools capture confirmed:
+  - side nav items: `Overview`, `Trend`, `AI`
+  - no `Market Pulse`
+  - no visible ops cards
+  - 3 trend cards
+  - 4 market data cards
+  - no card header sparkline boxes
+  - no desktop/mobile horizontal overflow
+
+## 2026-05-25 V2 pre-review visual polish
+
+Polished the V2 public report after reviewing fresh desktop/mobile captures.
+
+- Changed the V2 process card from raw English validation warnings to compact Korean operator-facing summaries.
+- Changed the process side-card label from `Process` to `검증 프로세스`.
+- Changed the generated-at ops card to compact `MM.DD HH:mm` formatting and normalized `supabase` to `Supabase`.
+- Tightened the brief-card text width so the decorative donut no longer crowds the summary copy.
+- Adjusted mobile metric tables so all four columns fit inside the viewport instead of clipping the annual-change column.
+- Scoped the mobile compact badge rule to metric tables only, so Watchpoints labels remain readable.
+- Refreshed V2 screenshots:
+  - `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+  - `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+- Edge headless DevTools capture confirmed desktop/mobile render completion, no mobile body overflow, and readable Watchpoints.
+- `scripts\final-readiness.cmd` passed against current `http://127.0.0.1:4173` and refreshed screenshots.
+
+## 2026-05-25 Final readiness command
+
+Added a non-destructive final readiness command for the pre-visual-review gate.
+
+- Added `scripts\Final-Readiness.ps1`.
+- Added `scripts\final-readiness.cmd`.
+- The command checks the currently running `http://127.0.0.1:4173` server, runs `Verify-Pipeline.ps1` on a temporary port, and verifies the V2 desktop, V2 mobile, and Admin comment workflow screenshots exist and are recent.
+- Updated `docs\FINAL_READINESS_CHECKLIST.md` so final user visual review is gated on `scripts\final-readiness.cmd`, not only the lower-level smoke test.
+- Updated `docs\OPERATOR_GUIDE.md` with the final review precheck command.
+
+Verification:
+
+- Current `4173` health/admin/report-v2 checks passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Final-Readiness.ps1` passed.
+- Temporary research verification file cleanup still leaves `data\research\research_2099-01-02.json` absent.
+
+## 2026-05-24 Assisted draft quality gate
+
+Tightened the fallback AI comment draft so Admin can review a more report-like draft before a paid/provider-backed LLM is connected.
+
+- `src/daily_report/ai/rule_based_provider.mjs` now gives `assisted_draft` mode a sectioned Korean draft instead of a raw metric list.
+- The sectioned draft covers `금리/크레딧`, `주식`, `환율/원자재`, and `변동폭 점검`, then appends saved-comment and research-evidence notes.
+- The provider still uses only current report observations plus included research items; it does not invent external news or mutate Supabase.
+- `/api/ask` keeps the existing metric-search answer shape.
+- `scripts\Verify-Pipeline.ps1` now checks that AI-assisted draft output is readable and contains the expected section shape. The section assertions avoid raw Korean literals in the PowerShell source so Windows PowerShell encoding does not break parsing.
+- Admin now has a `초안을 최종 코멘트로 복사` button. It copies the generated draft into the final-comment field only when the final field is empty or already identical, so existing final wording is not overwritten.
+- Added Edge headless Admin workflow capture: `design ref\figma-financial-dashboard\admin-comment-workflow-check.png`.
+- Restarted the local `4173` review server after the provider update.
+
+Verification:
+
+- `node --check src\daily_report\ai\rule_based_provider.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- Manual HTTP `/api/comments/2026-05-21/ai-draft` check returned a sectioned Korean draft with `provider=rule_based`.
+- Edge headless DevTools check confirmed the Admin copy button copied the generated draft to the final-comment field without saving or publishing.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server is reachable on `http://127.0.0.1:4173`.
+
+## 2026-05-24 V2 research visibility polish
+
+Continued the V2 readiness pass after Admin research persistence.
+
+- Public report V2 now loads `/api/research/{date}` together with validation during report load.
+- Added an `AI 근거` operations card so the public V2 screen exposes how many included research items are available to the AI layer.
+- The V2 process card now also states whether included research evidence is connected.
+- V2 chat reuses the already loaded included research items and only refetches research context if the report did not load it yet.
+- Mobile date navigation now keeps pills as fixed-size scroll items and automatically scrolls the active date into view.
+- Refreshed Edge headless screenshots for desktop and mobile after the UI change.
+- Rebuilt `src/daily_report/ai/rule_based_provider.mjs` Korean response templates; the fallback AI answer no longer emits mojibake.
+- `assisted_draft` mode now uses a Korean operator-review draft header instead of echoing the raw instruction prompt.
+- Added an Admin `AI draft trace` box that shows provider, included research count, returned source count, and source labels after AI-assisted draft generation.
+- Restarted the local `4173` review server so the visible Admin/V2 pages use the current code.
+
+Verification:
+
+- `node --check src\daily_report\report_v2\app.js`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\ai\rule_based_provider.mjs`
+- HTTP `/api/ask` check returned readable Korean answer text with `provider=rule_based` and research summary.
+- HTTP `/api/comments/2026-05-21/ai-draft` check returned a readable Korean draft header with provider/source/research summary.
+- `scripts\Verify-Pipeline.ps1` now includes a readable-text guard for AI market answers and AI-assisted draft output so mojibake-like fallback text is caught during smoke tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server is still reachable on `http://127.0.0.1:4173`.
+
+## 2026-05-24 Admin research persistence pass
+
+Continued after Claude's D-016~D-020 operations-policy commit. That commit changed `HANDOFF.md` only; no code was changed there.
+
+Implemented the next Admin/AI automation bridge without mutating Supabase report data:
+
+- Added local research persistence for `data/research/research_YYYY-MM-DD.json`.
+- Added `POST`/`PUT /api/research/{date}` to save normalized research items.
+- Kept `GET /api/research/{date}` as the read path and added deduping in AI context assembly.
+- Admin comment workflow can now add manual/news/Telegram/historical/source-note research items, set relevance, include/exclude them, delete them, and save the list.
+- AI-assisted draft generation now sends only currently included research items.
+- Public report V2 chat now reads `/api/research/{date}` and sends included items into `/api/ask`.
+- Extended `scripts/Verify-Pipeline.ps1` with a non-Supabase research save/reload check using temporary date `2099-01-02`; the temporary file is removed after the smoke test.
+
+Verification:
+
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\report_v2\app.js`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+
+Smoke result passed: latest `2026-05-21`, 35 observations, KOSPI series 289 points. Local review server was started on `http://127.0.0.1:4173/admin` and `/report-v2`.
+
+Browser visual verification was attempted through the Codex in-app browser, but the `iab` browser was unavailable in this session. Edge headless screenshots were refreshed instead:
+
+- `design ref\figma-financial-dashboard\report-v2-desktop-check.png`
+- `design ref\figma-financial-dashboard\report-v2-mobile-check.png`
+
+## 2026-05-23 scope clarification
+
+Final target is not just a prettier daily report screen. The target is a professional treasury daily-report system that can generate, validate, comment on, and publish the report reliably even when the primary operator is absent.
+
+Items not required for the current /report-v2 visual review gate are not removed from final scope. Provider-backed LLM/RAG, Google/news/Telegram crawling, AI-assisted final comment drafting, optional autonomous publishing, and audited external-value overwrite remain part of the final direction.
+
+Current sequencing: stabilize manual Admin workflow, non-destructive dry-run, validation, automation logs, and public V2 first. Then continue through docs/FUTURE_AUTOMATION_ROADMAP.md. The stable AI payload/provider boundary is documented in docs/AI_CONTEXT_CONTRACT.md.
+
+## 2026-05-23 AI/research foundation pass
+
+Implemented the first code-level hooks for the final AI automation direction without changing publication state.
+
+- Added `src/daily_report/ai/llm_provider.mjs` as the provider boundary.
+- Added `src/daily_report/ai/rule_based_provider.mjs` as the current fallback provider behind `/api/ask`.
+- Added `src/daily_report/research/research_items.mjs` for normalized Google/news/Telegram/manual-note research items.
+- Added `/api/ai/provider` and `/api/research/{date}`.
+- Added `db/research_items.sql` as the future Supabase storage schema; it has not been auto-applied.
+- Extended `scripts/Verify-Pipeline.ps1` to check provider status, research context, AI sources, and existing publish guards.
+- Added Admin source review panel and separate number-based vs AI-assisted draft buttons.
+- Added `/api/comments/{date}/ai-draft` as a non-mutating assisted-draft endpoint.
+- Rebuilt Admin `index.html` copy for the main workflow labels so the source review/comment flow no longer shows mojibake.
+- Verification passed after the change: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`.
+- Review server was restarted on `http://127.0.0.1:4173/admin` and `http://127.0.0.1:4173/report-v2` with the new code.
+- In-app browser automation was attempted for visual verification, but the `iab` browser session was unavailable in this environment. HTTP 200 and JS syntax checks passed.
+
+This means provider-backed LLM/RAG/crawling can be added behind the existing API contract instead of rewiring V2/Admin later.
+
+## 2026-05-23 operations policy round
+
+운영 정책 라운드. 코드 변경 없음, 다음 코드 사이클의 가이드라인이 되는 의사결정 5건 추가 (D-016~D-020). 핵심 요약:
+
+- **수신자 채널**: 기존 카톡 단톡방 유지 + 자동 PNG + 운영자 수동 forward + 웹 링크 (D-016).
+- **LLM provider**: Qwen vs DeepSeek API 비교 후 선택, 로컬 LLM 배제 (D-017).
+- **운영자 통제**: 단순 명령어 텔레그램 봇, 자연어 에이전트 X (D-018).
+- **휴가 모드**: 모바일 셀프 → 대체자 → AI 자동 발행(배너) 단계적 폴백 (D-019).
+- **배포**: 본부장 보고 전 demo 클라우드 (Railway, 개인 명의), 보고 후 회사 이관 (D-020).
+
+운영자 컴플라이언스 재확인: 인포맥스 PC가 외부망 = 외부 API/클라우드 배포/공개 URL 모두 회사 정책상 OK. 시장 데이터/발행 전 코멘트의 외부 API 전송도 OK. 본부장 보고는 2026-05-23 기준 다음 달(2026-06) 예정.
+
+다음 코드 작업 시작 시점에 이 의사결정들을 참조해 작업 우선순위와 모듈 경계를 잡는다.
+
+---
+
+
+## 2026-05-18 Codex update
+
+- Pulled `origin/master` to `512348f`.
+- Reapplied the local stash and resolved `src/daily_report/admin/server.mjs` in favor of the upstream API/data flow.
+- Phase B public report page work is implemented in `buildReviewHtml()`:
+  - 48px sticky report header with five market ticker chips.
+  - Compact commentary card capped at 120px.
+  - Three-column metric grid with domestic, overseas, and FX/commodity/crypto columns.
+  - Existing API/data helpers are preserved.
+- Next recommended entry point: Phase E inline SVG sparklines for rows with `data-metric-key`.
+
+> 다른 PC·다른 AI 도구(Codex/Claude/Gemini 등)로 작업을 이어받을 때 이 파일만 읽으면 즉시 진입 가능.
+> 작업 끝나면 **반드시 이 파일을 갱신**하고 commit + push.
+
+
+## 2026-05-22 Codex update
+
+- 07:00 예약 배치 dogfooding 결과:
+  - Windows 작업 스케줄러 `Market Daily Supabase Upload`는 `2026-05-22 07:00:01`에 실행됐고 결과 코드는 `0`이었다.
+  - 다음 실행 시간은 `2026-05-23 07:00:00`.
+  - Supabase 최신 리포트 날짜는 여전히 `2026-05-20`이었다. 오늘 배치는 실패하지 않았지만, 엑셀 원본에서 `2026-05-21` 유효 보고서가 생성되지 않은 상태였다.
+- 원인 후보를 운영 중 확인했다.
+  - 인포맥스 프로그램이 켜진 뒤 엑셀이 열려야 Excel add-in이 자동 동작한다.
+  - 인포맥스 프로그램이 간헐적으로 꺼질 수 있으므로, 엑셀만 열고 refresh하면 최신 데이터가 들어오지 않을 수 있다.
+- `scripts\Refresh-InfomaxWorkbook.ps1`에 인포맥스 사전 체크와 자동 실행을 추가했다.
+  - 기본 필수 프로세스: `infomaxmain`, `imxlcommapp`.
+  - 둘 중 하나가 없으면 `C:\Infomax\bin\infomaxlogin.exe`를 자동 실행하고 최대 120초 동안 준비 상태를 기다린다.
+  - 로그인 창에 아이디/비밀번호가 이미 저장되어 있으면 기본값으로 5초 뒤 Enter를 보내 로그인 버튼 클릭을 시도한다.
+  - 그래도 준비되지 않으면 엑셀을 열기 전에 실패 처리한다.
+  - 실패 메시지는 “Infomax startup did not become ready...”로 남고, 운영자는 인포맥스 로그인/네트워크 상태를 확인한 뒤 재실행해야 한다.
+  - 필요하면 `.env`의 `INFOMAX_LAUNCHER_PATH`, `INFOMAX_STARTUP_WAIT_SECONDS`, `INFOMAX_REQUIRED_PROCESSES`, `INFOMAX_LOGIN_AUTO_SUBMIT`, `INFOMAX_LOGIN_SUBMIT_DELAY_SECONDS`로 기준을 조정할 수 있다.
+  - 기존 `INFOMAX_MAIN_PATH`도 호환용으로 읽지만, 신규 설정은 `INFOMAX_LAUNCHER_PATH`를 사용한다.
+  - 로그인 창에서 사람이 아이디/비밀번호를 직접 입력해야 하는 환경이면 완전 자동화가 불가능하므로, 인포맥스 자동 로그인/저장 로그인 설정이 필요하다.
+- 최신성 경고를 보강했다.
+  - `Run-DailyMarketUpdate.ps1` 성공 메시지에 `Latest generated report date`와 `requested until`을 남긴다.
+  - 요청 종료일보다 실제 생성 최신일이 오래되면 로그에 freshness warning을 출력한다.
+  - `scripts\07_check_pipeline_status.cmd`는 기대 최신 리포트 날짜와 DB 최신 날짜를 비교해 `[Freshness] WARN`을 표시한다.
+  - Admin 자동화 로그 팝업도 향후 배치 로그에서 이 메시지를 감지하면 “자동화는 완료됐지만 최신 보고서 날짜 확인 필요”로 요약한다.
+- 운영 가이드에 “인포맥스 프로그램이 먼저 켜져 있어야 한다”는 조건을 추가했다.
+- 인포맥스가 켜진 상태에서 수동 재실행해 복구를 확인했다.
+  - 실행: `Run-DailyMarketUpdate.ps1 -LookbackDays 10`.
+  - run id: `b82ae3bd-c97a-41fd-a43e-87b237329882`.
+  - 결과: `2026-05-21` 리포트 생성/업로드 성공, uploaded_reports 8건, uploaded_observations 280건.
+  - post-upload DB validation: `2026-05-21` status `pass`, observations 35.
+  - 상태 점검 freshness: expected/latest 모두 `2026-05-21`, OK.
+  - Yahoo 대조 경고: KOSPI, KOSPI200, KOSDAQ, Nikkei 225. 기존 정책대로 참고 경고이며 업로드 차단 요건은 아니다.
+
+## 2026-05-21 Codex update
+
+- Windows 작업 스케줄러 `Market Daily Supabase Upload` 실행 시간을 매일 08:30에서 07:00으로 변경했다.
+  - 실제 작업 스케줄러 트리거를 갱신했고, 다음 실행 시간이 `2026-05-22 오전 7:00:00`으로 확인됐다.
+  - `scripts\Register-DailyReportScheduledTask.ps1` 기본 실행 시각을 `07:00`으로 변경했다.
+  - `docs\OPERATOR_GUIDE.md`와 HANDOFF의 자동화 실행 시각 표기를 `07:00`으로 맞췄다.
+  - GitHub push 완료: `0dc2d8f Move daily batch to 7am`.
+- `docs/ADMIN_MVP_CHECKLIST.md`를 추가했다.
+- Admin 5개 화면(데이터/미리보기/코멘트/검증/자동화 로그)이 MVP에서 해야 할 일을 정의하고, 충족/미충족/보류 항목을 분리했다.
+- 2단계 Admin 운영 MVP로 넘어가기 전 stop condition을 문서화했다.
+- 최신 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`를 실제 dogfooding했다.
+  - 실패 원인: pre-upload 검증 실패로 Supabase 업로드 차단.
+  - 기존 로그 요약은 `Supabase` 문자열 때문에 DB 연결 문제처럼 잘못 분류했다.
+  - `summarizeJobLog()`에서 pre-upload validation 실패를 Supabase 오류보다 먼저 분류하도록 수정했다.
+  - 현재 로그 팝업 요약은 “업로드 전 데이터 검증에서 막혔습니다”로 표시된다.
+- 같은 dogfooding 중 운영 기준 충돌을 확인했다.
+  - 기존 문서 기준: Yahoo Finance 대조는 시차/종가 차이가 있으므로 경고로만 사용.
+  - 기존 실행 기준: `--strict-cross-check` 때문에 Yahoo 차이만으로 pre-upload가 실패하고 업로드가 막힘.
+  - 수정: `Run-DailyMarketUpdate.ps1` pre-upload 단계에서 `--strict-cross-check` 제거.
+  - 현재 기준: 필수 로컬 지표 누락/비정상 숫자는 업로드 차단, Yahoo 차이는 Admin 검증 탭에서 확인할 경고/참고 항목.
+  - 검증: `validate_daily_data.py --skip-db --cross-check` 단독 실행 시 status `pass`, errors `[]` 확인. 현재 Codex 터미널에서는 Yahoo 외부 접속이 권한 문제로 warning 처리됐지만 exit code는 0.
+- Yahoo 검증 기준일 문제를 수정했다.
+  - 기존 `validate_daily_data.py`는 `range=5d` 조회 후 마지막 종가를 사용해서 기준일이 아니라 최신 값으로 비교할 수 있었다.
+  - 수정: report date 주변 기간을 조회하고, `report_date`와 일치하는 Yahoo 종가를 우선 사용한다. 없으면 기준일 이전의 가장 가까운 값을 사용한다.
+  - 검증 결과 payload에 `external_date`를 추가했고, Admin 검증 탭의 Yahoo 값 아래에 `YYYY-MM-DD 기준`을 표시한다.
+  - 2026-05-20 확인 결과 KOSPI/KOSPI200/KOSDAQ/Nikkei 225 모두 `external_date: 2026-05-20`으로 매칭됐다.
+- 2026-05-20 누락 데이터 재업로드 완료.
+  - `Run-DailyMarketUpdate.ps1 -FromDate 2026-05-11 -UntilDate 2026-05-20 -SkipRefresh`를 네트워크 권한 있는 외부 실행으로 돌렸다.
+  - 결과: uploaded_reports 8건, uploaded_observations 280건.
+  - post-upload DB validation: 2026-05-20 status `pass`, errors `[]`.
+  - 새 성공 job id: `bf60c9bd-2260-42eb-8699-7fa7264a4ff3`.
+  - 주의: Codex 샌드박스 안에서 같은 명령을 실행하면 Python `requests`가 Supabase/Yahoo 접속에서 `[WinError 10013]`으로 차단될 수 있다. 이 경우 코드 문제가 아니라 실행 환경 네트워크 권한 문제다.
+- Admin 시장 데이터 탭 표 첫 열에 `No.` 순번을 추가했다.
+  - 전체 탭에서는 마지막 순번으로 전체 지표 수를 확인할 수 있다.
+  - 하단 행 수 문구는 제거했다.
+- Admin 자동화 로그의 `선택 항목 재실행`을 운영자 추적 가능하게 보강했다.
+  - 버튼을 누르는 즉시 새 `job_runs` started 행을 생성한다.
+  - 재실행 로그 파일은 `data/logs/admin_rerun_*.log`로 고정 생성된다.
+  - PowerShell 자식 프로세스 stdout/stderr를 같은 로그 파일에 남긴다.
+  - 프로세스가 최종 상태를 DB에 기록하기 전에 비정상 종료되면, 아직 `started`인 행만 `failed`로 바꿔 운영자 화면에 남긴다.
+  - `Run-DailyMarketUpdate.ps1`은 외부에서 받은 `-RunId`, `-LogPath`를 지원한다.
+  - Dogfooding: 기존 실패 job `0952f07d-59ba-405c-842f-27db50c82f1b`에서 Admin 재실행 API를 호출했다.
+    - 새 run id: `f9d2e566-1765-4cc5-a3f5-6b4d91f6ef38`
+    - mode: `upload_only`
+    - 기간: `2026-05-11` ~ `2026-05-20`
+    - 결과: `success`, uploaded_reports 8건, uploaded_observations 280건
+    - 로그 모달 API 요약: `자동화가 정상 완료됐습니다.`
+- D-003 재확인 완료.
+  - `report/index.html`에는 Chart.js/CDN 차트 스크립트가 없다.
+  - `report/app.js` sparkline과 챗봇 차트는 `svg/polyline/rect` 기반이다.
+  - `node --check src/daily_report/report/app.js` 통과.
+- Admin 코멘트 발행 규칙을 MVP 수준으로 명시했다.
+  - `draft`: 임시저장
+  - `reviewed`: 검토 완료
+  - `published`: 발행 상태
+  - `reviewed/published`로 저장할 때 최종 코멘트와 초안 코멘트가 모두 비어 있으면 프론트엔드와 서버에서 저장을 막는다.
+  - API dogfooding: 빈 코멘트로 `published` 저장 요청 시 400 응답 확인.
+  - API dogfooding: 기존 2026-05-14 코멘트를 그대로 `reviewed` 상태로 재저장, 200 응답 및 observation_count 35 확인.
+- 검증 승인 dogfooding 상태:
+  - 2026-05-20, 2026-05-19, 2026-05-18, 2026-05-15, 2026-05-14 검증 API는 모두 `pass`.
+  - 실제 미승인 mismatch가 없어 승인 레코드는 강제로 만들지 않았다.
+  - 낮은 위험의 실제 차이가 발생하면 그때 `validation_approvals` 기록을 생성한다.
+- `scripts/03_start_admin.cmd`를 운영자용으로 보강했다.
+  - 더블클릭하면 Admin 서버를 켜고 2초 뒤 `http://127.0.0.1:4173/admin`을 브라우저로 자동 오픈한다.
+  - `DAILY_REPORT_ADMIN_PORT`가 이미 지정되어 있으면 해당 포트를 사용한다.
+- Admin 시장 데이터 표의 `No.` 열 폭을 고정했다.
+  - `colgroup`으로 번호 열을 52px 고정하고 가운데 정렬했다.
+  - 지표명/값/전일대비/작년말대비 컬럼이 남는 공간을 가져가도록 조정했다.
+- 다음 우선순위는 새 화면 추가가 아니라 실제 운영 dogfooding이다:
+  1. 자동화 로그에서 실패 행 → 로그 보기 → 선택 항목 재실행 흐름 확인
+  2. 검증 탭에서 실제 운영자가 승인 가능한 mismatch 1건 승인 기록
+  3. 코멘트 저장/상태 변경/미리보기 확인까지 하루 발행 플로우를 한 번 끝까지 실행
+
+## 지금 바로 할 일 (2026-05-25 시점, 투자자 동향 재업로드는 2026-05-29 완료됨)
+
+배경: 지표 매핑이 35개 → 50개로 복원됐고(투자자 동향 15개 포함), 로컬 워크북 추출/coverage는 50개 정상이다. 그러나 현재 라이브 최신 리포트 `2026-05-21`은 아직 예전 35-observation payload라서 Admin/API/공개 V2의 `주식·투자자` 카드에 투자자 동향이 비어 있다. 코드/문서는 비파괴 검증까지만 했고 Supabase는 아직 안 바꿨다.
+
+다음 사람이 할 일 (인포맥스 PC 또는 Supabase 네트워크가 되는 운영 PC에서):
+
+1. 재업로드 전 사전 확인
+   - `git pull` → `scripts\check-workspace-sync.cmd`로 최신 매핑(50개) 코드를 받았는지 확인.
+   - `scripts\10_check_excel_coverage.cmd` 실행 → mapped 50 / extracted 50 / missing 0 재확인.
+   - 워크북 `선물투자자별순매수금액`, `주식투자자별순매수금액` 시트에 `2026-05-21` 일자 히스토리 값이 남아 있는지 확인(과거 일자 재추출이 가능해야 함).
+   - (D-023, 함께 처리) 은행채 AAA를 다시 넣을 거면 이 재업로드 전에 매핑을 추가한다: `국내금리` 시트에서 은행채 AAA 열 위치(3개월/1/2/3/5/10년) 확인 → `scripts\Export-MarketDailyCachedValues.ps1`와 `scripts\import_historical_market_data.py` 양쪽에 추가(`category=credit`, `unit=%`, `ChangeMode=rate_bp`, 권장 시작 1년·2년·3년) → `scripts\10_check_excel_coverage.cmd`로 mapped==extracted 확인. 그러면 같은 재업로드로 은행채까지 한 번에 반영된다. 공개 V2는 `credit` 지표를 자동 표시하므로 UI 변경 불필요.
+2. `2026-05-21` 재생성·재업로드 (이미 엑셀에 값이 있으므로 새로고침 없이):
+   ```powershell
+   powershell.exe -ExecutionPolicy Bypass -File scripts\Run-DailyMarketUpdate.ps1 -FromDate 2026-05-21 -UntilDate 2026-05-21 -SkipRefresh
+   ```
+   - 필요하면 최근 구간 백필: `-FromDate 2026-05-18 -UntilDate 2026-05-21 -SkipRefresh`.
+   - 주의: 이 단계는 Supabase를 실제로 바꾸는 파괴적 작업이다. Codex 샌드박스/네트워크 차단 환경(`WinError 10013`)에서는 실패하므로 외부망 PC에서 실행한다.
+3. 업로드 후 검증
+   - `/api/reports/2026-05-21`의 observations가 50으로 늘었는지 확인.
+   - Admin/공개 V2 `주식·투자자` 카드에 `투자자 동향` 그룹 행이 표시되는지 육안 확인.
+   - `scripts\09_validate_daily_data.cmd`로 post-upload validation `pass` 확인.
+4. 앞으로의 일일 배치 확인
+   - 07:00 예약 배치는 이제 매핑이 50개라 자동으로 투자자 동향까지 적재된다. 다음 배치(`2026-05-26 07:00`) 결과가 50 observations인지 확인하면 신규 경로가 정상인지 검증된다.
+
+이 작업이 끝나면 이 "최우선" 블록을 제거하고 아래 1단계 항목으로 돌아간다.
+
+---
+
+**1단계 — 데이터 적재/검증/발행 MVP 안정화**
+
+1. Admin 자동화 로그 dogfooding
+   - 2026-05-22 07:00 예약 배치는 작업 스케줄러 결과 코드 0으로 끝났지만, 최신 리포트가 `2026-05-20`에 머물러 최신성 경고 케이스가 확인됐다.
+   - 인포맥스 프로그램이 꺼져 있으면 Excel add-in이 자동 동작하지 않는 조건을 발견했고, 배치 시작 전 `infomaxmain`, `imxlcommapp` 프로세스 체크 및 `infomaxlogin.exe` 자동 실행을 추가했다.
+   - 인포맥스가 켜진 뒤 수동 재실행해 `2026-05-21` 업로드와 freshness OK를 확인했다.
+   - 실제 실패 행 체크 → `선택 항목 재실행`을 운영자가 이해하는지 확인한다.
+   - 2026-05-22 API dogfooding: 최신 성공 row 재실행 POST는 400으로 차단됨을 확인했다.
+   - 2026-05-22 API dogfooding: 실패 row `0952f07d-59ba-405c-842f-27db50c82f1b`의 `log_path`가 다른 PC 경로일 때 403 대신 “현재 PC에서 열 수 없는 로그” 안내 summary를 반환하도록 수정했다.
+   - 현재는 백그라운드 실행 연결까지 완료했으나, 실제 클릭 테스트는 Excel/DB 업로드가 실행되므로 운영자 확인 후 진행한다.
+   - 행 기반 재실행 UX가 과하면 1단계 후반으로 미루고 “로그 요약 + 수동 명령”만 남긴다.
+2. Admin/공개 리포트 Supabase 기준 조회 확인
+   - 2026-05-22 확인 결과 `/api/job-runs`는 Supabase 최신 run을 보는데 `/api/reports`가 로컬 `data/processed` 파일 1건만 보고 있어 최신 리포트가 화면에 뜨지 않는 문제가 있었다.
+   - `/api/reports`, `/api/reports/:date`, `/api/history`, `/api/metrics/:metric_key/series`, 코멘트 초안/저장 경로를 Supabase 우선으로 보강했다.
+   - 검증 결과 최신 리포트는 `2026-05-21`, 리포트 수 289건, 최신 observations 35건, KOSPI series 289포인트.
+   - 2026-05-22 재확인: `/api/reports`, `/api/reports/2026-05-21`, `/api/history?days=3`, `/api/metrics/kospi/series`, `/admin`, `/report` 응답 정상. 최신 리포트는 `2026-05-21`, observations 35건, KOSPI series 289포인트.
+   - 2026-05-22 `scripts\verify-pipeline.cmd`와 `npm.cmd run verify:pipeline` 모두 통과. 앞으로 Admin/API 변경 후 기본 smoke test로 사용한다.
+   - Edge headless는 현재 Codex 세션에서 GPU 프로세스 오류로 DOM 렌더링 검증이 불가했다. 운영 PC에서 `scripts\03_start_admin.cmd`로 실제 브라우저를 열어 Admin 날짜 드롭다운/미리보기 iframe/공개 `/report` 첫 화면만 눈으로 확인한다.
+3. 검증 pre-upload gate 운영 확인
+   - 업로드 전 검증 실패 시 Supabase 적재가 막히는지 실제 실패 케이스에서 확인한다.
+   - 실패 사유가 `job_runs.message`, 로그 팝업 요약, 원문 로그에 충분히 남는지 확인한다.
+   - 2026-05-22 `.venv-docling`을 복구하고 `requirements.txt` 기준 `requests/openpyxl/Pillow` 설치 완료.
+   - `scripts\Check-DailyReportEnvironment.ps1`는 Python 3와 `requests/openpyxl` 존재 여부를 표시한다.
+   - `scripts\Validate-DailyData.ps1`는 로컬 최신 JSON `2025-12-23` 기준 pass. `2026-05-21`은 Supabase에는 있지만 로컬 `data/processed\market_daily_2026-05-21.json`가 없어 날짜 지정 검증은 실패한다. 최신 날짜 pre-upload gate는 실제 일일 배치가 해당 JSON을 만든 직후 확인한다.
+4. 승인 UI dogfooding
+   - 검증 차이가 있을 때 승인/무시 흐름을 실제로 눌러보며 운영에 필요한 최소 기능만 남긴다.
+   - DB 덮어쓰기 버튼은 아직 보류한다.
+5. 엑셀 원본 항목 점검 2차
+   - `docs/EXCEL_COVERAGE.md` 기준 mapped metric 누락은 0건.
+   - 2026-05-22 `scripts\Check-ExcelCoverage.ps1` 재실행 결과 `2025-12-23` 로컬 엑셀 기준 mapped 35개, extracted 35개, missing 0개, PowerShell mapping mismatch 0개.
+   - 다음에는 사용자 눈으로 중요 항목이 빠지지 않았는지 확인하고, 의도적 제외 항목은 문서에 사유를 추가한다.
+6. Admin 2단계 진입 체크리스트 확인
+   - `docs/ADMIN_MVP_CHECKLIST.md` 기준으로 5개 화면의 MVP 충족 여부를 본다.
+   - 미충족 항목만 2단계 작업으로 넘기고, 공개 리포트 디자인/시각화 실험은 계속 보류한다.
+7. 공개 리포트 디자인/시각화는 보류
+   - 1단계에서는 깨짐 여부만 확인한다.
+   - 클릭형 차트, 상세 패널, 디자인 실험은 데이터 적재 MVP 안정화 뒤 별도 사이클로 진행한다.
+
+## 2026-05-19 Codex update - 목표와 현재 방향
+
+### 최종 목표
+
+시니어 수준의 개발자가 만든 내부 운영 도구처럼, 데일리 리포트 작성과 발행 과정을 자동화한다.
+
+핵심 기준:
+- 매일 반복되는 수작업을 줄인다.
+- 데이터 원천과 발행 결과를 추적 가능하게 만든다.
+- 사람이 최종 판단과 발행 권한을 갖는다.
+- 숫자 데이터, 코멘트, 참고 자료를 Supabase에 누적해 이후 AI 검색과 챗봇에 활용한다.
+- 다음 개발자나 AI 도구가 `HANDOFF.md`만 보고 이어받을 수 있게 유지한다.
+
+### 제품 목표
+
+1. 하네스 스켈레톤 코드 기반으로 개발한다.
+2. 데이터는 인포맥스 Excel add-in을 우선 원천으로 사용한다.
+3. Excel을 열고 일정 시간 대기해 각 시트의 데이터 갱신이 완료되면 Supabase로 전송한다.
+4. Supabase에 쌓인 수치 데이터를 기준으로 리포트 페이지를 생성하고 조회할 수 있게 한다.
+5. 리포트 코멘트는 관리자 페이지에서 수정하고 입력할 수 있게 한다.
+6. AI는 뉴스 데이터, 지정 텔레그램/참고 메모, 수치 데이터, 과거 코멘트를 기반으로 코멘트 초안을 작성한다.
+7. AI 초안은 자동 발행하지 않고, 사람이 관리자 페이지에서 검토하고 최종 코멘트로 확정한다.
+8. 최종 리포트 페이지 디자인은 계속 개선한다.
+9. AI API를 통해 리포트 조회 화면에 챗봇을 붙인다.
+10. 각 단계에서 개선, 추가, 수정할 부분은 Codex가 지속적으로 검토하고 제안한다.
+11. 협업과 인수인계를 위해 진행 상황, 결정 사항, 다음 작업은 계속 `HANDOFF.md`에 기록한다.
+
+### 현재 방향 판단
+
+현재 방향은 맞다. 다만 완성 상태는 아니며, 지금은 작동하는 프로토타입에서 운영 가능한 내부 도구로 넘어가는 단계다.
+
+이미 진행된 축:
+- Excel 캐시/시트 기반 수치 추출
+- Supabase 스키마와 REST 권한 설정
+- 과거 수치 데이터 백필
+- 과거 PNG OCR 코멘트 1회 백필
+- 관리자 코멘트 입력/수정 흐름
+- 공개 리포트 HTML 초안
+- 매일 자동 실행용 Windows 작업 스케줄러 등록
+
+아직 남은 핵심 축:
+- 일일 자동 실행 결과의 DB 기반 작업 로그
+- Supabase를 단일 기준으로 삼는 리포트 렌더링 정리
+- 관리자 화면 한글 인코딩과 문구 정리
+- 실제 LLM 기반 코멘트 초안 생성
+- 과거 코멘트/참고 자료 embedding 생성과 RAG 검색
+- 뉴스/텔레그램 수집 방식 결정 및 구현
+- 최종 리포트 디자인과 모바일 대응
+- AI 챗봇과 질의 기반 차트 기능
+
+### 과거 PNG OCR의 위치
+
+과거 PNG OCR은 매일 반복할 작업이 아니라 초기 백필 작업이다.
+
+현재 `source_documents`에 쌓인 과거 OCR 데이터는 향후 RAG/유사 사례 검색의 참고 자료로 사용한다. 추가 과거 파일이 생기지 않는 한, 일일 자동화의 핵심 경로에는 포함하지 않는다.
+
+일일 반복 경로:
+
+```text
+인포맥스 Excel 갱신
+-> 수치 데이터 추출
+-> Supabase 업로드
+-> 관리자 코멘트 작성/AI 초안 생성
+-> 최종 검토 및 발행
+-> 공개 리포트/챗봇 조회
+```
+
+### 2026-05-18~19 진행 현황
+
+- Supabase 권한 SQL 실행 후 REST 업로드 정상화.
+- 수치 데이터 업로드 완료:
+  - `reports`: 285건 (`2025-04-14` ~ `2026-05-15`)
+  - `market_observations`: 9,799건
+  - `report_comments`: 285건
+- 과거 OCR 코멘트 업로드 완료:
+  - `source_documents`: 194건 (`2025-07-15` ~ `2026-05-18`)
+- 자동화 등록:
+  - Windows 작업 스케줄러 `Market Daily Supabase Upload`
+  - 매일 07:00 실행
+  - 실행 스크립트: `scripts/Run-DailyMarketUpdate.ps1`
+  - 최근 10일 구간을 재업로드해 누락 보정
+
+### 다음 우선순위
+
+1. `HANDOFF.md` 최신화와 문서 인코딩 정리
+2. 일일 자동 실행 상태 점검 도구 보강
+3. DB 작업 로그 테이블 추가
+4. 관리자 화면 한글 문구 복구
+5. 리포트 렌더링을 Supabase 기준으로 정리
+6. embedding/RAG 검색 기반 코멘트 초안 준비
+7. 실제 AI API 연결
+
+---
+## 2026-05-19 update: pre-upload validation gate
+
+The daily data load is now split into an operational gate:
+
+1. Open/refresh Excel unless `-SkipRefresh` is used.
+2. Extract recent report JSON only. No Supabase write happens in this step.
+3. Validate the extracted JSON before upload.
+   - Required local metrics must exist and be numeric.
+   - Yahoo Finance cross-check runs for all configured Yahoo-mappable metrics.
+   - Cross-check mismatches are strict in the automated pipeline and block upload.
+   - Supabase DB validation is skipped in this pre-upload step because the row may not exist yet.
+4. Upload to Supabase only after pre-upload validation passes.
+5. Run post-upload DB validation against Supabase `reports`, `market_observations`, and `report_comments`.
+6. Record `started/success/failed` in `job_runs` with the log path.
+
+Verified command:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\Run-DailyMarketUpdate.ps1 -SkipRefresh -LookbackDays 2
+```
+
+Verified result:
+
+- Run id: `7f8939f0-4bed-45ec-a9e7-c53ee12d317f`
+- Report date: `2026-05-18`
+- Observations: 35
+- Pre-upload Yahoo cross-check: pass
+- Supabase upload: 1 report, 35 observations
+- Post-upload DB validation: pass
+
+Key files:
+
+- `scripts/Run-DailyMarketUpdate.ps1`
+- `scripts/validate_daily_data.py`
+- `scripts/Validate-DailyData.ps1`
+
+---
+
+## 2026-05-19 update: admin date picker layout
+
+Admin validation tab is kept, but the report date navigation has been simplified.
+
+- Removed the long full-date list from the left sidebar.
+- Moved report date selection into the top summary area as a dropdown.
+- Repurposed the left sidebar for current report status:
+  - 기준일
+  - 지표 수
+  - 코멘트 상태
+  - 생성 시각
+- Left sidebar now shows only the latest 5 reports as quick shortcuts.
+
+Rationale: daily reports will accumulate quickly, so a full date list makes the admin screen noisy. The date dropdown is enough for navigation, while the sidebar is more valuable as an operational status panel.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `http://127.0.0.1:4177/admin` returned 200
+- `http://127.0.0.1:4177/api/reports` returned 200
+
+Follow-up UI adjustment:
+
+- Removed the "Recent 5 reports" sidebar shortcuts.
+- Reworked the sidebar as current status + admin menu:
+  - 데이터
+  - 검증
+  - HTML 미리보기
+- Removed metric-count display from the admin UI because it is not operationally important.
+- Renamed the main tab from `데이터/코멘트` to `데이터`.
+- Removed the source column from the data table.
+- Renamed table change columns:
+  - `1D` -> `전일대비`
+  - `YTD` -> `작년말대비`
+- Made the comment workflow pane independently scrollable on desktop so long market data tables do not force the user to scroll the full page just to reach the final comment/publish controls.
+- Refined navigation model:
+  - Left sidebar is now reserved for top-level modules, not duplicated one-day tabs.
+  - Central tabs are for the selected report date only: `데이터`, `코멘트`, `검증`.
+  - `Current Report` sidebar summary was removed because date/status/generated are already in the top summary.
+  - `HTML 미리보기` remains only in the sidebar output area.
+- Split comments into a separate `코멘트` tab.
+  - Added placeholder research blocks for future bond Google crawling and Telegram crawling.
+  - This matches the intended workflow where the user reviews crawled references while writing the final comment.
+- Simplified validation table:
+  - `엑셀/DB 값` -> `DB`
+  - Removed `% 차이` and `허용` columns.
+  - Result now shows whether DB and Yahoo are `일치` or `다름`.
+
+---
+
+## 2026-05-19 update: admin workflow direction alignment
+
+Accepted the revised UI direction after comparing alternatives:
+
+- Keep the `데이터` tab as a dense operator table. Do not replace it with the public report card layout.
+- Add `미리보기` as a first-class central tab that embeds the generated HTML report.
+- Keep `코멘트` and `검증` as selected-date workflow tabs.
+- Move `자동화 로그` into the left sidebar as a top-level operations module.
+- Remove low-value legacy labels and aliases:
+  - `1D` -> `전일대비`
+  - `YTD` -> `작년말대비`
+  - removed admin CSS `--red`, `--blue`, `--green` compatibility aliases
+  - aligned public report up/down colors to Korean market convention: 상승 red, 하락 blue
+- Added `/api/job-runs` for recent automation outcomes from Supabase `job_runs`.
+- Added `docs/AI_CONTEXT_CONTRACT.md` so future chart panels, RAG, and chatbot features share the same metric context.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\report\app.js`
+- Legacy label/token grep returned no matches for `--red`, `--blue`, `--green`, `1D`, `YTD` under `src` and `scripts`.
+- Temporary admin server on port `4180` returned:
+  - `/api/health`: 200
+  - `/api/job-runs`: 200
+  - `/admin`: 200
+
+Next recommended steps:
+
+1. Add validation approval history before adding any DB overwrite function.
+2. Design the public report metric detail panel and mobile bottom sheet using the AI context contract.
+3. Implement the LLM adapter behind the context contract, with Qwen as the first candidate and DeepSeek as a comparison candidate.
+
+---
+
+## 2026-05-19 update: validation approval history
+
+Added a first version of validation approval history.
+
+Purpose:
+
+- When DB/Infomax values differ from Yahoo Finance but the operator decides the DB value is acceptable, record that decision.
+- Avoid adding a risky "overwrite DB with Yahoo" function before approval/audit flow exists.
+
+Files:
+
+- `db/validation_approvals.sql`
+- `db/schema.sql`
+- `src/daily_report/admin/server.mjs`
+- `src/daily_report/admin/index.html`
+- `src/daily_report/admin/app.js`
+- `src/daily_report/admin/styles.css`
+
+Behavior:
+
+- New table: `validation_approvals`
+  - unique by `(report_id, metric_key, source)`
+  - stores DB value, external value, source symbol, reason, approved_by, approved_at
+- `GET /api/validation/:date` now attaches approval history to validation rows.
+- `POST /api/validation/:date/approvals` records or updates an approval.
+- Admin validation tab shows:
+  - `우리 값 승인` button on mismatch rows
+  - `승인됨` badge for approved mismatches
+  - approval history block below the table
+
+Operational note:
+
+- Run `db/validation_approvals.sql` once in Supabase SQL Editor before using the approval button in production.
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- Temporary admin server on port `4181` returned:
+  - `/api/health`: 200
+  - `/admin`: 200
+  - `/api/validation/2026-05-18`: 200
+  - current approval count: 0
+
+---
+
+## 2026-05-19 update: public report metric detail panel [Superseded by D-014]
+
+Added the first public-report interaction layer for the long-term chart/chat direction.
+
+Behavior:
+
+- `/report` is now served by the Admin server.
+- `/report/app.js` and `/report/styles.css` are now served under `/report/`.
+- Public report metric rows were clickable and keyboard-accessible.
+- Clicking a metric opened:
+  - desktop: right-side detail panel
+  - mobile: bottom sheet
+- 2026-05-20: this interaction was removed by D-014 for the 1단계 MVP.
+- Detail panel shows:
+  - metric name/category
+  - current value
+  - `전일대비`
+  - `작년말대비`
+  - up to 20 historical points from `/api/metrics/:metric_key/series`
+  - current report comment as the first context note
+- Added `/api/history?days=n` because the public report already referenced it for sparklines.
+- The detail panel can prefill the chat input with a metric-specific question.
+- Public chat call was aligned from missing `/api/chat` to existing `/api/ask`.
+
+Verified:
+
+- `node --check src\daily_report\report\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- `node --check src\daily_report\admin\app.js`
+- Temporary admin server on port `4183` returned:
+  - `/report`: 200
+  - `/api/history?days=3`: 200
+  - `/api/metrics/kospi/series`: 200
+
+## 2026-05-19 Codex update - Chart.js cleanup and AI context payload
+
+- Kept D-003 instead of superseding it: no Chart.js / D3 dependency for public report charts.
+- Removed the Chart.js CDN from `src/daily_report/report/index.html`.
+- Replaced public report sparkline, metric detail chart, and chat chart rendering with inline SVG.
+- Chart colors now read CSS design tokens (`--up`, `--down`, `--primary`, `--warn`) instead of hard-coded financial colors.
+- `/api/ask` request payload now follows the agreed AI context shape as far as current data allows: `surface`, `selected_metric`, `report_comment`, `validation`, `history`, and `research_items`.
+- `research_items` is currently an empty array until Google/Telegram/manual-note collectors are implemented.
+
+## 2026-05-20 Codex update - Design reference decision
+
+- Do not adopt generic SaaS UI kits as the overall product direction.
+- Admin direction: Stripe/Linear/Grafana style.
+  - left side = top-level operations modules
+  - center = selected report date workflow
+  - avoid persistent right context panels unless they contain actionable data such as selected metric detail, validation drilldown, AI sources, or alert remediation
+- Public report direction: Bloomberg/Refinitiv style.
+  - dense financial data scanning
+  - Korean market color convention
+  - no persistent/detail side panel during 1단계 MVP unless an operational need is proven
+- Generic UI kits may only be used for micro patterns:
+  - badges
+  - table hover/selected states
+  - drawers
+  - form controls
+  - modal motion
+- 2026-05-20 correction: Removed the first sticky right context panel because it only explained the screen and did not add operational value. Keep the central workspace wide until a real drilldown panel is needed.
+
+## 2026-05-20 Codex update - Automation log popup
+
+- Replaced the low-value `log_path` copy flow with an Admin-side log viewer.
+- Added `GET /api/job-runs/:id/log`.
+  - The endpoint reads the `job_runs.log_path` for that run.
+  - It only serves files under `data/logs` to avoid arbitrary local file reads.
+- Admin automation log rows now show `로그 보기`.
+- Admin automation log now supports row-based retry:
+  - only failed/error rows have an enabled checkbox
+  - `선택 항목 재실행` reruns the selected failed job period
+  - retry mode is inferred from the failure message
+    - workbook/json generation failures: Excel refresh + validation + upload
+    - upload/validation failures: skip Excel refresh and rerun validation + upload
+- Clicking `로그 보기` opens a modal with:
+  - run status/job name
+  - started time/message
+  - operator-facing summary and next actions
+  - log file path
+  - full log text
+- If the log file is missing, the modal explains that the run may have happened on another computer or the local log may have been deleted.
+- Current summary rules cover:
+  - success: processed period, uploaded report/observation counts, validation pass
+  - Excel COM busy/rejected error: close Excel/EXCEL.EXE and rerun
+  - Supabase-related error: check network/env/key and rerun
+  - validation-related error: inspect Admin validation tab and source Excel values
+
+Verified:
+
+- `node --check src\daily_report\admin\app.js`
+- `node --check src\daily_report\admin\server.mjs`
+- Admin server on port `4188` returned:
+  - `/api/health`: 200
+  - `/api/job-runs`: 200
+  - `/api/job-runs/{latest_success_id}/rerun`: 400 because only failed/error runs can be retried
+  - `/api/job-runs/{latest_id}/log`: 200, summary `자동화가 정상 완료됐습니다.`
+  - `/api/job-runs/{failed_id}/log`: 200, summary `Excel이 응답하지 않아 자동화가 실패했습니다.`
+
+### 2026-05-21 — Codex — Admin operation polish
+
+- Adjusted the Admin data table so the `No.` column remains available while the metric column no longer consumes the full remaining width.
+- Kept metric names left-aligned and constrained the data table column widths to reduce the visual gap between `지표` and `값`.
+- Changed the automation log modal so the operator-facing summary and next actions are shown first, while raw logs are hidden behind `원문 로그 보기`.
+- Updated `docs/ADMIN_MVP_CHECKLIST.md` to mark collapsed raw logs as part of the MVP automation-log behavior.
+
+### 2026-05-21 — Codex — Pipeline status check
+
+- `scripts\Check-DailyPipelineStatus.ps1` shows the Windows scheduled task last run at `2026-05-21 08:30:01` with result code `1`.
+- Admin/Supabase `job_runs` latest row is `success` (`f9d2e566-1765-4cc5-a3f5-6b4d91f6ef38`), so the failed scheduled run was recovered by Admin rerun.
+- Latest Supabase report date is `2026-05-20`, with 288 reports, 9,904 observations, and 288 comment rows.
+- `scripts\09_validate_daily_data.cmd` passed for `2026-05-20`: 35 observations, Supabase rows present, and all configured Yahoo Finance cross-checks passed.
+
+### 2026-05-21 — Codex — Excel coverage automation
+
+- Added `scripts\check_excel_coverage.py`, `scripts\Check-ExcelCoverage.ps1`, and `scripts\10_check_excel_coverage.cmd`.
+- The coverage check reads `MARKET DAILY.xlsm`, builds the active report from the Python metric mapping, and reports mapped/missing metrics plus unmapped source sheets.
+- Latest result for `2026-05-20`: 35 mapped metrics, 35 extracted observations, 0 missing mapped metrics, 0 Python/PowerShell mapping mismatches.
+- Deferred source sheets detected: `선물투자자별순매수금액`, `주식투자자별순매수금액`, `국공채형MMF`, `일반형MMF`.
+- Updated `docs\EXCEL_COVERAGE.md` and `docs\ADMIN_MVP_CHECKLIST.md` with the automated coverage result.
+
+### 2026-05-21 — Codex — Pre-upload gate hardened
+
+- `scripts\validate_daily_data.py` now imports the active metric mapping and fails if any mapped metric is missing from the generated JSON.
+- This replaces the earlier weak count check (`at least 30`) with the current MVP requirement: all 35 mapped metrics must be present.
+- `scripts\09_validate_daily_data.cmd` passed after the change for `2026-05-20`.
+
+### 2026-05-21 — Codex — Operator status command hardened
+
+- `scripts\check_supabase_status.py` now catches Supabase/network failures and prints a short JSON error with `next_actions` instead of a Python stack trace.
+- `scripts\Check-DailyPipelineStatus.ps1` formats log timestamps as `yyyy-MM-dd HH:mm:ss` to avoid locale/codepage corruption in cmd output.
+- `scripts\07_check_pipeline_status.cmd`, `scripts\09_validate_daily_data.cmd`, and `scripts\10_check_excel_coverage.cmd` now set UTF-8 codepage before running.
+- `scripts\Validate-DailyData.ps1` now groups repeated Yahoo/network warnings and keeps Supabase network errors concise.
+- Rewrote `docs\OPERATOR_GUIDE.md` as a clean operator runbook for Admin, status check, validation, Excel coverage, and failed-run recovery.
+
+## 2026-05-22 Codex update - harness cleanup
+
+- Reviewed Claude Code best-practice suggestions against the official docs.
+- Added `scripts\Verify-Pipeline.ps1` and `scripts\verify-pipeline.cmd` so agents can smoke-test the admin server/API without Python.
+- Verified `scripts\verify-pipeline.cmd` and `npm.cmd run verify:pipeline`: latest `2026-05-21`, observations 35, KOSPI points 289.
+- Added `CLAUDE.md` as a short always-loaded guide that imports existing docs instead of duplicating them.
+- Added `*.stackdump` to `.gitignore` and `npm run verify:pipeline` as an alternate entry point.
+- Deferred HANDOFF-to-skill migration, project `.claude/settings.json`, and reviewer agents to separate commits because they change agent workflow more broadly.
+
+## 2026-05-23 Codex update - final visual review gate
+
+- Cleaned up `/report-v2` static Korean copy in `src/daily_report/report_v2/index.html`.
+  - Fixed visible mojibake in labels, hero copy, loading text, AI panel, and suggestion chips.
+  - Fixed malformed static HTML around the brief section and AI suggestion buttons.
+- Tightened mobile CSS in `src/daily_report/report_v2/styles.css`.
+  - Mobile shell/main/header areas are constrained to `100vw`.
+  - Hero subtitle now wraps before it clips.
+  - Ticker cards remain one column on mobile.
+- Refreshed screenshots:
+  - `design ref/figma-financial-dashboard/report-v2-desktop-check.png`
+  - `design ref/figma-financial-dashboard/report-v2-mobile-check.png`
+- Re-ran checks:
+  - `node --check src\daily_report\admin\server.mjs`
+  - `node --check src\daily_report\admin\app.js`
+  - `node --check src\daily_report\report_v2\app.js`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1`
+- Smoke result: pass, latest `2026-05-21`, 35 observations, dry-run publish guard included.
+- Local review server is currently running on `http://127.0.0.1:4173/report-v2`.
+- Non-visual MVP gate is ready for user visual/design review.
+- Clarification: provider-backed LLM/RAG, Telegram/news crawling, AI final-comment drafting, optional autonomous publishing, and audited Yahoo/external overwrite are not removed from the final goal. They are only not blockers for the current visual/design review gate.
+- Future automation direction is now captured in `docs/FUTURE_AUTOMATION_ROADMAP.md`; the stable payload and provider boundary are captured in `docs/AI_CONTEXT_CONTRACT.md`.
+
+## 2026-05-23 Codex update
+
+- Public report V2 작업 방향을 기존 `/report` 보존 + 신규 `/report-v2` 병행 운영으로 잡았다.
+- Figma community dashboard 레퍼런스는 `design ref/figma-financial-dashboard/`에 저장했다.
+  - `financial-dashboard-main.png`: 메인 Financial Dashboard 레퍼런스.
+  - `ecards-dashboard-table.png`: 보조 E-cards/table 레퍼런스.
+  - `design-tokens.json`, `tokens.css`, `component-notes.md`: 색상, 라운드, shadow, card/sidebar/button 사용 메모.
+- `src/daily_report/admin/server.mjs`에 `/report-v2` 정적 라우트를 추가했다. 기존 `/report`는 그대로 둔다.
+- `src/daily_report/report_v2/` 신규 화면을 만들었다.
+  - Figma 기반 white shell + left sidebar + soft cards + blue/yellow/green accent를 적용했다.
+  - 상단 ticker는 KOSPI, USD/KRW, US 10Y, Gold, WTI로 구성했다.
+  - 운영자가 바로 판단할 수 있도록 데이터 검증, 발행 상태, 커버리지, 최신성, 생성 시각 strip을 추가했다.
+  - Supabase 데이터는 로드되지만 로컬 `data/processed` JSON 검증 산출물이 없는 경우는 `Review`로 표시해 과도한 실패처럼 보이지 않게 했다.
+  - Daily treasury brief, watchpoints, process card를 추가해 단순 지표 나열보다 의사결정용 대시보드에 가깝게 구성했다.
+  - AI 분석 패널은 기존 `/api/ask` 흐름을 유지한다.
+- 확인 완료:
+  - `node --check src\daily_report\admin\server.mjs`
+  - `node --check src\daily_report\report_v2\app.js`
+  - `http://127.0.0.1:4173/report-v2`, `/report-v2/app.js`, `/api/reports` 200 확인.
+  - Edge headless screenshot 확인: `design ref/figma-financial-dashboard/report-v2-desktop-check.png`, `design ref/figma-financial-dashboard/report-v2-mobile-check.png`.
+- 다음 작업 후보:
+  1. 사용자 최종 육안 테스트 후 `/report-v2`를 기본 공개 리포트로 승격할지 결정.
+  2. Admin의 검증 API가 Supabase 최신 리포트 기준 결과를 반환하도록 정리해 V2 Process card와 운영 로그를 더 정확히 연결.
+  3. final_comment 작성/검토/발행 플로우까지 V2에서 상태가 자연스럽게 이어지는지 dogfooding.
+### 2026-05-23 follow-up - V2 validation and final-check readiness
+
+- 사용자가 원하는 최종 확인 기준을 재정의했다: 중간 디자인 리뷰가 아니라, AI/자동화/Admin/public report 흐름이 smoke test를 통과한 뒤 마지막에 화면만 확인하는 방식이 맞다.
+- `/api/validation/{date}`를 보강했다.
+  - 최신 Supabase 리포트는 존재하지만 로컬 `data/processed/market_daily_{date}.json` 산출물이 없는 경우, 기존에는 validation이 `fail`로 보였다.
+  - 이제 이 경우 Supabase에 적재된 리포트/35개 observations/핵심 지표 기준으로 fallback 검증을 수행하고 `validation_source: supabase_fallback`을 반환한다.
+  - Yahoo Finance 대조는 로컬 processed JSON 산출물이 필요한 검증으로 보고 fallback에서는 생략하며, 생략 사유를 warning으로 표시한다.
+- Admin validation summary 문구도 fallback일 때 `Supabase 적재 데이터 기준 검증 · Yahoo 대조 생략`으로 표시되도록 수정했다.
+- `scripts/Verify-Pipeline.ps1` smoke test에 `/report-v2`와 최신 `/api/validation/{latestDate}` 체크를 추가했다.
+- 확인 완료:
+  - `node --check src\daily_report\admin\server.mjs`
+  - `node --check src\daily_report\admin\app.js`
+  - `node --check src\daily_report\report_v2\app.js`
+  - `scripts\verify-pipeline.cmd` 통과. 최신 `2026-05-21`, observations 35, `/report-v2` 200, latest validation pass.
+  - 4173 서버 재시작 완료. 현재 확인 URL은 `http://127.0.0.1:4173/report-v2`.
+- 아직 사용자에게 최종 디자인 리뷰를 요구할 단계는 아니다. 다음으로는 실제 운영자 관점에서 Admin comment/preview/publish 경로를 최종 dogfooding하고, 문제가 없을 때 마지막 화면 확인을 요청한다.
+### 2026-05-23 follow-up - non-destructive final-readiness smoke scope
+
+- `scripts\Verify-Pipeline.ps1`를 확장했다. 이제 기존 API 200 확인뿐 아니라 운영 프로세스 핵심 경로를 비파괴로 확인한다.
+  - `/report-v2` HTTP 200
+  - latest validation pass
+  - comment draft generation non-empty
+  - `/api/ask` 기본 AI 시장 답변 non-empty 및 matched metrics 존재
+  - automation job list 존재
+  - automation job log summary 존재. 다른 PC 로그 경로여도 soft failure summary가 있으면 운영자가 읽을 수 있는 상태로 본다.
+  - 빈 `reviewed` 코멘트 저장 400 차단
+  - 빈 `published` Supabase 업로드 400 차단
+- `answerMarketQuestion()`의 응답 source를 더 이상 `local_report_json`으로 고정하지 않고 실제 report source 또는 `report_data`로 표시하도록 수정했다.
+- 문서 추가/갱신:
+  - `docs\FINAL_READINESS_CHECKLIST.md`: 사용자가 최종 디자인 리뷰를 보기 전 만족해야 하는 조건 정의.
+  - `docs\OPERATOR_GUIDE.md`: 최종 준비 상태 확인 절차와 `/report-v2` URL 추가.
+  - `docs\AI_CONTEXT_CONTRACT.md`: 현재 AI는 rule-based report-grounded MVP이며 provider-backed LLM/RAG/자동 최종 코멘트는 deferred임을 명시.
+  - `docs\ADMIN_MVP_CHECKLIST.md`: 확장된 smoke test 범위와 final readiness checklist 위치 반영.
+- 검증: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` 통과.
+### 2026-05-23 follow-up - publish dry-run guard
+
+- Supabase publish/update API에 `dry_run: true` 경로를 추가했다.
+  - `POST /api/supabase/reports/{date}` payload에 `dry_run: true`를 넣으면 comment/status validation, 대상 Supabase report row, observation count, SQL preview만 확인하고 DB를 변경하지 않는다.
+  - `scripts\Verify-Pipeline.ps1`는 이제 빈 published 차단뿐 아니라 정상 published payload의 dry-run readiness도 확인한다.
+- dry-run 분기 추가 전 한 번의 테스트 요청이 실제 update 경로를 탄 것을 확인했고, 즉시 `2026-05-21` 리포트를 기존 상태인 `draft`/빈 코멘트로 복구했다.
+  - 복구 확인: `/api/reports/2026-05-21` status `draft`, `auto_comment`/`final_comment` 빈 값.
+- 재검증: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Verify-Pipeline.ps1` 통과. `published upload dry run` 포함.

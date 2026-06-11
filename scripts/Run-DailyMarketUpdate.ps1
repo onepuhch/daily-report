@@ -98,6 +98,36 @@ function Read-DotEnv {
     return $values
 }
 
+function Send-FailureAlert {
+    param(
+        [string]$Message,
+        [string]$RunId,
+        [string]$LogPath
+    )
+
+    $token = if ($env:DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN) { $env:DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN } else { $envValues["DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN"] }
+    $chatId = if ($env:DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID) { $env:DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID } else { $envValues["DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID"] }
+    if (-not $token -or -not $chatId) {
+        Write-Host "Failure alert skipped: DAILY_REPORT_ALERT_TELEGRAM_BOT_TOKEN / DAILY_REPORT_ALERT_TELEGRAM_CHAT_ID not configured."
+        return
+    }
+
+    $text = "[Market Daily] Daily batch FAILED`n$Message`nRun: $RunId`nLog: $LogPath"
+    $bodyJson = @{ chat_id = $chatId; text = $text } | ConvertTo-Json
+    try {
+        Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.telegram.org/bot$token/sendMessage" `
+            -ContentType "application/json; charset=utf-8" `
+            -Body ([Text.Encoding]::UTF8.GetBytes($bodyJson)) `
+            -TimeoutSec 15 | Out-Null
+        Write-Host "Failure alert sent to Telegram chat $chatId."
+    }
+    catch {
+        Write-Host "Failure alert could not be sent: $($_.Exception.Message)"
+    }
+}
+
 function Record-JobRun {
     param(
         [string]$Python,
@@ -136,6 +166,10 @@ function Record-JobRun {
     }
     catch {
         Write-Host "Job run recording skipped: $($_.Exception.Message)"
+    }
+
+    if ($Status -eq "failed") {
+        Send-FailureAlert -Message $Message -RunId $RunId -LogPath $LogPath
     }
 }
 
